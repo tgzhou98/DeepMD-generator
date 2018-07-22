@@ -96,6 +96,9 @@ def parser() -> object:
     parser.add_argument(
         'file', type=str, help='Get the json configuration file')
 
+    parser.add_argument('-r', '--restart', action='store_true',
+                        help='Restart from the generator_checkpoint.json')
+
     args = parser.parse_args()
     return args
 
@@ -144,12 +147,43 @@ def generator():
     # get initial poscar from vasp_sys_dir
     ##############################################################
 
-    for iter_index in range(iter_number):
+    # initial index
+    iter_index = 0
+    need_restart = args.restart
+    have_restart_false = False
+    ckpt = dict()
+
+    # Check whether have to jump to a loop
+    if args.restart:
+        # load json file
+        with open('generator_checkpoint.json') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            iter_index = ckpt['iter_index']
+
+    while iter_index < iter_number:
         iter_dir = f'iter_{iter_index}'
+
+        # Start create iteration dir
+        if not os.path.exists(iter_dir):
+            os.makedirs(iter_dir)
+
+        # Now process vasp iteration
+        vasp_dir = os.path.join(iter_dir, 'vasp')
+        if not os.path.exists(vasp_dir):
+            os.makedirs(vasp_dir)
+        vasp_iter(iter_index, vasp_data, need_restart)
+
+        # Now process deepmd iteration
+        deepmd_dir = os.path.join(iter_dir, 'deepmd')
+        if not os.path.exists(deepmd_dir):
+            os.makedirs(deepmd_dir)
+        deepmd_iter(iter_index, deepmd_data)
+
+        # Now process lammps iteration
 
         # Get job index
         model_devi_job_index = 0
-        for iter_accumulates_index in len(iter_number_list):
+        for iter_accumulates_index, _ in enumerate(iter_number_list):
             if iter_index < iter_number_list[iter_accumulates_index]:
                 model_devi_job_index = iter_accumulates_index
         # iteration before this job
@@ -159,44 +193,67 @@ def generator():
         else:
             iter_before_this_job = iter_number_list[model_devi_job_index - 1]
 
-        # Start create iteration dir
-        if not os.path.exists(iter_dir):
-            os.makedirs(iter_dir)
 
-        # Now process vasp iteration
-        vasp_dir = os.path.join(iter_dir, 'vasp')
-        if not os.path.exists(vasp_dir):
-            os.makedirs(iter_dir)
-        vasp_iter(iter_index, vasp_data)
-
-        # Now process deepmd iteration
-        deepmd_dir = os.path.join(iter_dir, 'deepmd')
-        if not os.path.exists(deepmd_dir):
-            os.makedirs(deepmd_dir)
-        deepmd_iter(iter_index, deepmd_data)
-
-        # Now process lammps iteration
         lmp_dir = os.path.join(iter_dir, 'lammps')
         if not os.path.exists(lmp_dir):
             os.makedirs(lmp_dir)
         lmp_iter(iter_index, model_devi_job_index, iter_before_this_job,
                  lmp_data, deepmd_data)
 
+        # Finally continue the loop
+        iter_index += 1
 
-def vasp_incar_generate(vasp_data: Dict, vasp_config_dir: str):
+
+def vasp_kpoints_generate(vasp_config_dir: str,
+                          vasp_data: Dict):
+    """TODO: Docstring for vasp_kpoints_generate.
+
+    :vasp_config_dir: str
+    :vasp_data: Dict: TODO
+    :returns: TODO
+
+    """
+    vasp_kpoints_path = os.path.join(vasp_config_dir, 'KPOINTS')
+    kmesh: List = vasp_data['params']['kmesh']
+    vasp_kpoints_str = \
+        f"""System with Gamma grid
+            0 0 0
+            Gamma
+            {kmesh[0]} {kmesh[1]} {kmesh[2]}
+            0 0 0
+        """
+
+    with open(vasp_kpoints_path, 'w') as vasp_kpoints_file:
+        vasp_kpoints_file.write(vasp_kpoints_str)
+
+
+def vasp_incar_kpoints_generate(vasp_data: Dict, poscar_index: int,
+                                vasp_dir: str):
     """Generate INCAR for vasp
 
     :vasp_params: Dict: TODO
     :returns: TODO
 
     """
+
+    vasp_config_dir = os.path.join(vasp_dir, f'config_{poscar_index}')
     vasp_incar_path = os.path.join(vasp_config_dir, 'INCAR')
-    with open(vasp_incar_path, 'w') as vasp_incar_file:
-        vasp_incar_str = \
-            f"""SYSTEM =  H2 # electronic degrees
+
+    vasp_kspace_str = ''
+    if vasp_data['params']["using_kspacing_not_kmesh"]:
+        vasp_kspace_str = \
+            f"""# Add kspacing and kgamma tags
+                KSPACING	= {vasp_data['params']['kspacing']}
+                KGAMMA	=	.TRUE.
+            """
+    else:
+        vasp_kpoints_generate(vasp_config_dir, vasp_data)
+
+    vasp_incar_str = \
+        f"""SYSTEM =  H2 # electronic degrees
             PREC  = Accurate                 # chose Low only after tests
             ENCUT = {vasp_data['params']['encut']}
-            EDIFF = {vasp_data['params']['ediff']} # do not use default (too large)
+            EDIFF = {vasp_data['params']['ediff']} # default is large
             ALGO = Fast
             LREAL = A                      # real space projection
             ISMEAR = -1 ; SIGMA = 0.130    # Fermi smearing: 1500 K 0.086 10-3
@@ -206,18 +263,18 @@ def vasp_incar_generate(vasp_data: Dict, vasp_config_dir: str):
             NPAR = {vasp_data['params']['npar']}     # default choose 7
             KPAR = {vasp_data['params']['kpar']}     # default choose 4
 
-            # Add kspacing and kgamma tags
-            KSPACING	= {vasp_data['params']['kspacing']}
-            KGAMMA	=	.TRUE.
+        {vasp_kspace_str}
 
             # (do little writing to save disc space)
             IBRION = -1 ; LCHARG = .FALSE. ; LWAVE = .FALSE.
         """
+
+    with open(vasp_incar_path, 'w') as vasp_incar_file:
         vasp_incar_file.write(vasp_incar_str)
 
 
-def vasp_potcar_generate(vasp_data: Dict, vasp_config_dir: str,
-                         vasp_dir: str) -> str:
+def vasp_potcar_generate(vasp_data: Dict, vasp_config_index: int,
+                         vasp_dir: str):
     """TODO: Docstring for vasp_potcar_generate.
 
     :vasp_params: Dict: TODO
@@ -225,19 +282,20 @@ def vasp_potcar_generate(vasp_data: Dict, vasp_config_dir: str,
     :returns: TODO
 
     """
+    vasp_config_dir = os.path.join(vasp_dir, f"config_{vasp_config_index}")
     vasp_potcar_path = os.path.join(vasp_config_dir, 'POTCAR')
     vasp_backup_potcar_path = os.path.join(vasp_dir, 'POTCAR')
     # Check the potcar if is generated
     if not os.path.exists(vasp_backup_potcar_path):
         # Concat POTCAR
-        with open(vasp_potcar_path, 'w') as vasp_potcar_file:
+        with open(vasp_backup_potcar_path, 'w') as vasp_potcar_file:
             for fname in vasp_data['potential']:
                 with open(fname) as infile:
                     for line in infile:
                         vasp_potcar_file.write(line)
+    print(vasp_backup_potcar_path)
     # if the potcar is generated
     shutil.copyfile(vasp_backup_potcar_path, vasp_potcar_path)
-    return vasp_backup_potcar_path
 
 
 def vasp_run(vasp_data: Dict, vasp_config_dir: str):
@@ -260,7 +318,7 @@ def vasp_run(vasp_data: Dict, vasp_config_dir: str):
                    """)
 
 
-def vasp_iter(iter_index: int, vasp_data: Dict):
+def vasp_iter(iter_index: int, vasp_data: Dict, restart: bool):
     """Do vasp iteration
 
     :iter_index: int: TODO
@@ -287,8 +345,18 @@ def vasp_iter(iter_index: int, vasp_data: Dict):
     poscars = get_poscar_files(vasp_previous_dir, True)
 
     # Prepare data for vasp
-    vasp_backup_potcar_path = ''
-    for poscar_index, poscar_file in enumerate(poscars):
+    # vasp_backup_potcar_path = ''
+
+    poscar_index = 0
+    if iter_index != 0:
+        with open('generator_checkpoint.json') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            if restart:
+                poscar_index = ckpt['config_index']
+
+    poscar_file = poscars[poscar_index]
+
+    while poscar_index < len(poscars):
         vasp_config_dir = os.path.join(vasp_dir, f'config_{poscar_index}')
         if not os.path.exists(vasp_config_dir):
             os.makedirs(vasp_config_dir)
@@ -296,16 +364,44 @@ def vasp_iter(iter_index: int, vasp_data: Dict):
         vasp_poscar_dst_path = os.path.join(vasp_config_dir, 'POSCAR')
         shutil.copyfile(poscar_file, vasp_poscar_dst_path)
         # prepare POTCAR
-        vasp_backup_potcar_path = vasp_potcar_generate(
-            vasp_data, vasp_config_dir, vasp_dir)
+        vasp_potcar_generate(vasp_data, poscar_index, vasp_dir)
         # prepare INCAR
-        vasp_incar_generate(vasp_data, vasp_config_dir)
+        vasp_incar_kpoints_generate(vasp_data, poscar_index, vasp_dir)
         # Don't need KPOINTS (have specified kspaceing)
         # Now run vasp
+
+        # Update checkpoint
+        vasp_update_checkpoint(poscar_index, iter_index)
+
         vasp_run(vasp_data, vasp_config_dir)
 
-    # Remove Backup POTCAR
-    os.remove(vasp_backup_potcar_path)
+        # Finally update the poscar
+        poscar_index += 1
+
+    # # Remove Backup POTCAR
+    # os.remove(vasp_backup_potcar_path)
+
+
+def vasp_update_checkpoint(vasp_config_index: int,
+                           iter_index: int):
+    """TODO: Docstring for vasp_update_checkpoint.
+    :returns: TODO
+
+    """
+    if iter_index == 0 and vasp_config_index == 0:
+        with open('generator_checkpoint.json', 'w') as generate_ckpt:
+            ckpt: Dict = dict()
+            ckpt['status'] = 'vasp'
+            ckpt['config_index'] = vasp_config_index
+            ckpt['iter_index'] = iter_index
+            json.dump(ckpt, generate_ckpt)
+    else:
+        with open('generator_checkpoint.json', 'r+') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            ckpt['status'] = 'vasp'
+            ckpt['config_index'] = vasp_config_index
+            ckpt['iter_index'] = iter_index
+            json.dump(ckpt, generate_ckpt)
 
 
 def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
@@ -469,8 +565,23 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict):
         deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
         # move previous model.ckpt if is not initial
         deepmd_mv_ckpt(iter_index, graph_index)
+        # update deepmd check point
+        deepmd_update_checkpoint(iter_index)
         # Traning and freezing the model
         deepmd_run(deepmd_graph_dir, deepmd_data)
+
+
+def deepmd_update_checkpoint(iter_index: int):
+    """TODO: Docstring for deepmd_update_checkpoint.
+    :returns: TODO
+
+    """
+    with open('generator_checkpoint.json', 'r+') as generate_ckpt:
+        ckpt = json.load(generate_ckpt)
+        ckpt['status'] = 'deepmd'
+        ckpt['config_index'] = -1
+        ckpt['iter_index'] = iter_index
+        json.dump(ckpt, generate_ckpt)
 
 
 def lmp_in_generate(iter_index: int, model_devi_job_index: int,
@@ -642,6 +753,8 @@ def lmp_iter(iter_index: int, model_devi_job_index: int,
     # generate in.deepmd config file
     lmp_in_generate(iter_index, model_devi_job_index, iter_before_this_job,
                     lmp_data['model_devi_jobs'], lmp_config_dir, deepmd_data)
+    # update lammps check point
+    lmp_update_checkpoint(iter_index)
     # Run lammps command
     lmp_run(lmp_config_dir, lmp_data)
     # choose bad configurations
@@ -737,6 +850,19 @@ def lmp_parse_dump2poscar(iter_index: int, model_devi_job_index,
             # Generate POSCAR
             poscar_path = os.path.join(bad_config_dir, 'POSCAR')
             io.write(poscar_path, bad_config, format='vasp')
+
+
+def lmp_update_checkpoint(iter_index: int):
+    """TODO: Docstring for deepmd_update_checkpoint.
+    :returns: TODO
+
+    """
+    with open('generator_checkpoint.json', 'r+') as generate_ckpt:
+        ckpt = json.load(generate_ckpt)
+        ckpt['status'] = 'lammps'
+        ckpt['config_index'] = -1
+        ckpt['iter_index'] = iter_index
+        json.dump(ckpt, generate_ckpt)
 
 
 def copytree(src, dst, symlinks=False, ignore=None):

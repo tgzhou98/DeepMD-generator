@@ -8,13 +8,13 @@
 # purpose     :
 #########################################################################
 
+import argparse
 import os
 import sys
-import argparse
 from typing import List
+
 import numpy as np
-from ase import io
-from ase import units
+from ase import io, units
 
 
 def get_poscar_files(directory: str, recursive: bool) -> List:
@@ -153,17 +153,23 @@ def perp() -> None:
 
         configuration = io.read(poscar_file)
         cell = configuration.cell
-        positions = configuration.positions
+        positions = np.copy(configuration.positions)
         # density unit g/cm^3
         density = np.sum(configuration.get_masses()) * \
             units._amu / configuration.get_volume() * 10**27
 
+        # print('density', density)
+        # print('mass', configuration.get_masses())
+        # print('goal_density', goal_density)
+
         for new_config_index in range(divides + 1):
-            ratio_multi = goal_density / density * \
+            density_ratio = goal_density / density * \
                         (((new_config_index - divides // 2) / divides *
                            ratio) + 1)
-            configuration.cell = cell * ratio_multi
-            configuration.positions = positions * ratio_multi
+            # print("density_ratio", density_ratio)
+            configuration.cell = cell / pow(density_ratio, 1 / 3)
+            configuration.positions = positions / pow(density_ratio, 1 / 3)
+            print(positions)
 
             # Create configuration path
             config_path = os.path.join(set_path, f'config_{new_config_index}')
