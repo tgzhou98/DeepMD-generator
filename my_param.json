@@ -11,7 +11,7 @@
 		"npar":		4,
 		"kpar":		4,
 		"_comment":	" that's all "
-		},
+		}
 	},
 	"deepmd": {
 		"deepmd_bin_path": "/home/tgzhou/Research/DeepMD/deepmd-kit-smooth/deepmd-kit-master/deepmd_smooth_root/bin",
@@ -71,11 +71,13 @@
 	"lmp": {
 		"command":	"/home/tgzhou/Tools/lammps-11Aug17/bin/lmp_mpi",
 		"np": 28,
+		"mass_map": [1.00794],
+		"element_map": ["H"],
 		"model_devi_trust": 0.050,
 		"model_devi_f_trust_lo":	0.050,
-		"model_devi_f_trust_hi":	0.150,
+		"model_devi_f_trust_hi":	0.550,
 		"model_devi_e_trust_lo":	0.050,
-		"model_devi_e_trust_hi":	0.150,
+		"model_devi_e_trust_hi":	0.550,
 		"model_devi_jobs": [
 			{
 			"temps_lo": 2000,

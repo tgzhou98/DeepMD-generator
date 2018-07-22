@@ -16,11 +16,13 @@ import shutil
 import subprocess
 import sys
 import time
+from itertools import compress
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import matplotlib.pyplot as plt
 import numpy as np
+from ase import io
 
 import cessp2force_lin
 import convert2raw
@@ -101,7 +103,7 @@ def parser() -> object:
 def uniq(seq: List) -> List:
     # return unique list without changing the order
     # from http://stackoverflow.com/questions/480214
-    seen = set()
+    seen: Set = set()
     seen_add = seen.add
     return [x for x in seq if x not in seen and not seen_add(x)]
 
@@ -278,7 +280,8 @@ def vasp_iter(iter_index: int, vasp_data: Dict):
     # VASP poscar is in lammps dir
     else:
         iter_previous_dir = f'iter_{iter_index - 1}'
-        vasp_previous_dir = os.path.join(iter_previous_dir, 'lammps')
+        vasp_previous_dir = os.path.join(iter_previous_dir, 'lammps',
+                                         'generated_poscar')
 
     # Get poscar
     poscars = get_poscar_files(vasp_previous_dir, True)
@@ -487,6 +490,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
     press = 3000000  # unit bar
     temps_damp = 0.1
     press_damp = 1
+    trj_freq = model_devi_jobs[model_devi_job_index]['trj_freq']
 
     # Get corresponding temparature and pressure
 
@@ -494,7 +498,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
     temps_hi = model_devi_jobs[model_devi_job_index]['temps_hi']
     temps_divides = model_devi_jobs[model_devi_job_index]['temps_divides']
     if model_devi_jobs[model_devi_job_index]['temps_damp']:
-        temps_damps = model_devi_jobs[model_devi_job_index]['temps_damp']
+        temps_damp = model_devi_jobs[model_devi_job_index]['temps_damp']
 
     # Get the iter_index after minus the iteration before this job
     new_iter_index = iter_index - iter_before_this_job
@@ -511,7 +515,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
                  (press_divides - 1)) * 10000  # result is bar
 
         if model_devi_jobs[model_devi_job_index]['press_damp']:
-            press_damps = model_devi_jobs[model_devi_job_index]['press_damp']
+            press_damp = model_devi_jobs[model_devi_job_index]['press_damp']
 
         # Set fix command
         fix_str = f'fix 1 all npt temp $t $t ${{td}} iso $p $p ${{pd}}'
@@ -573,7 +577,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
         thermo  10
 
         # trajectory
-        dump		atom_traj all xyz 10 dump.trajectory
+        dump		atom_traj all xyz {trj_freq} dump.trajectory
 
         # execution
         run 	 2000
@@ -613,8 +617,7 @@ def lmp_run(lmp_config_dir: str, lmp_data: Dict) -> None:
 
 
 def lmp_iter(iter_index: int, model_devi_job_index: int,
-             iter_before_this_job: int, lmp_data: Dict,
-             deepmd_data: Dict):
+             iter_before_this_job: int, lmp_data: Dict, deepmd_data: Dict):
     """Generate specific configurations in an iteration
 
     :iter_index: int: TODO
@@ -639,8 +642,101 @@ def lmp_iter(iter_index: int, model_devi_job_index: int,
     # generate in.deepmd config file
     lmp_in_generate(iter_index, model_devi_job_index, iter_before_this_job,
                     lmp_data['model_devi_jobs'], lmp_config_dir, deepmd_data)
-    # Run lammps command 
+    # Run lammps command
     lmp_run(lmp_config_dir, lmp_data)
+    # choose bad configurations
+    lmp_parse_dump2poscar(iter_index, model_devi_job_index, lmp_config_dir,
+                          lmp_data)
+
+
+def lmp_get_bad_config_mask(iter_index: int, model_devi_job_index: int,
+                            lmp_config_dir: str, lmp_data: Dict) -> List:
+    """Get the bad config list from model_deviation
+
+    :lmp_config_dir: str: TODO
+    :lmp_data: Dict: TODO
+    :returns:   len(bad_configs) = config_numbers
+                bad_configs is a ***BOOL*** mask determine which to choose
+    """
+    bad_configs_mask: List = []
+    bad_configs_list: List = []
+    trust_configs = 0
+    # parse model_devi.out file
+    model_devi_out_path = os.path.join(lmp_config_dir, 'model_devi.out')
+    model_devi_f_trust_lo = lmp_data['model_devi_f_trust_lo']
+    model_devi_f_trust_hi = lmp_data['model_devi_f_trust_hi']
+
+    with open(model_devi_out_path, 'r') as model_devi_out_file:
+        for line_number, line in enumerate(model_devi_out_file):
+            if line_number != 0:
+                line_field: List = line.split(line)
+                if float(line_field[5]) < model_devi_f_trust_lo:
+                    bad_configs_mask.append(False)
+                elif float(line_field[5]) >= model_devi_f_trust_lo and \
+                        float(line_field[5]) <= model_devi_f_trust_hi:
+                    bad_configs_mask.append(True)
+                    bad_configs_list.append(line_field[5])
+                    trust_configs += 1
+                else:
+                    bad_configs_mask.append(False)
+
+    max_nchoose = lmp_data["model_devi_jobs"][model_devi_job_index]["nchoose"]
+    if trust_configs > max_nchoose:
+
+        # choose the max nchoose configurations
+        bad_configs_array = np.array(bad_configs_list)
+        max_choose_configs_index = np.argsort(bad_configs_array)[-max_nchoose:]
+        # Choose configs less than the max nchoose
+        choosed_bad_configs_mask = np.array(bad_configs_mask)[
+            max_choose_configs_index]
+        bad_configs_mask = choosed_bad_configs_mask.tolist()
+
+    return bad_configs_mask
+
+
+def lmp_parse_dump2poscar(iter_index: int, model_devi_job_index,
+                          lmp_config_dir: str, lmp_data: Dict):
+    """Change the dump file to the xyz file
+
+    :dump_file_path: str: TODO
+    :lmp_data: Dict: TODO
+    :returns: TODO
+
+    """
+    dump_file_path = os.path.join(lmp_config_dir, 'dump.trajectory')
+    dump_xyz_path = os.path.join(lmp_config_dir, 'dump.xyz')
+    with open(dump_file_path, 'r') as dump_file:
+        with open(dump_xyz_path, 'w') as dump_xyz_file:
+            for line in dump_file:
+                line_field = line.split()
+                if len(line_field) == 4:
+                    element_type: str = lmp_data['element_map'][int(
+                        line_field[0])]
+                    line_field[0] = element_type
+                dump_xyz_file.write(' '.join(line_field))
+                line = ' '.join(line_field) + '\n'
+                dump_xyz_file.write(line)
+
+    # Read xyz file
+
+    configs_list: List = io.read(dump_xyz_path, index=':', format='xyz')
+
+    # Get bad configs
+    lmp_bad_configs_mask: List = lmp_get_bad_config_mask(
+        iter_index, model_devi_job_index, lmp_config_dir, lmp_data)
+    # make poscar dir
+    generated_poscar_dir = os.path.join(lmp_config_dir, 'generated_poscar')
+    if not os.path.exists(generated_poscar_dir):
+        os.makedirs(generated_poscar_dir)
+
+    for bad_config_index, bad_config in enumerate(
+            compress(configs_list, lmp_bad_configs_mask)):
+        bad_config_dir = f"bad_config_{bad_config_index}"
+        if not os.path.exists(bad_config_dir):
+            os.makedirs(bad_config_dir)
+            # Generate POSCAR
+            poscar_path = os.path.join(bad_config_dir, 'POSCAR')
+            io.write(poscar_path, bad_config, format='vasp')
 
 
 def copytree(src, dst, symlinks=False, ignore=None):
