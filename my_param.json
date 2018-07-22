@@ -1,0 +1,96 @@
+{
+	"vasp": {
+		"sys_dir": "/home/tgzhou/Research/DeepMD/Hydrogen/perp_data/iter",
+		"np": 28,
+		"command": "/software/bin/vasp_std",
+		"potential": ["/home/PAW_POT/paw_PBE/H_h/POTCAR"],
+		"params":	{
+		"ecut":		700,
+		"ediff":	1e-6,
+		"kspacing":	0.16,
+		"npar":		4,
+		"kpar":		4,
+		"_comment":	" that's all "
+		},
+	},
+	"deepmd": {
+		"deepmd_bin_path": "/home/tgzhou/Research/DeepMD/deepmd-kit-smooth/deepmd-kit-master/deepmd_smooth_root/bin",
+		"numb_models":	4,
+		"_comment":	"These batch will change batch size in the training_params",
+		"sys_batch_size":	2,
+		"init_batch_size":	8,
+		"training_params": {
+			"_comment": " model parameters",
+			"use_smooth":	true,
+			"sel_a":		[100],
+			"rcut_smth":		3.80,
+			"rcut":			4.00,
+			"_comment":	" default rule: []",
+			"_comment":	" user defined rule: for each type provides two axes, ",
+			"_comment":	"                    for each axis: (a_or_r, type, idx)",
+			"_comment":	"                    if type < 0, exclude type -(type+1)",
+			"_comment": "                    for water (O:0, H:1) it can be",
+			"_comment": "                    [0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0]",
+			"n_neuron":		[160, 160, 160],
+			"filter_neuron":	[50,100],
+			"n_axis_neuron":	4,
+
+			"_comment": " traing controls",
+			"_comment": " system should be changed in generator",
+			"systems":		["../"],
+			"set_prefix":	"set",    
+			"stop_batch":	1000000,
+			"batch_size":	1,
+			"start_lr":		0.005,
+			"decay_steps":	5000,
+			"decay_rate":	0.95,
+
+			"start_pref_e":	0.02,
+			"limit_pref_e":	1.0,
+			"start_pref_f":	1000,
+			"limit_pref_f":	1,
+			"start_pref_v":	0,
+			"limit_pref_v":	0,
+
+			"seed":		1,
+
+			"_comment": " display and restart",
+			"_comment": " frequencies counted in batch",
+			"disp_file":	"lcurve.out",
+			"disp_freq":	5000,
+			"numb_test":	100,
+			"save_freq":	5000,
+			"save_ckpt":	"model.ckpt",
+			"restart":		false,
+			"load_ckpt":	"model.ckpt",
+			"disp_training":	true,
+			"time_training":	true,
+			"_comment":		"that's all"
+			}
+	},
+	"lmp": {
+		"command":	"/home/tgzhou/Tools/lammps-11Aug17/bin/lmp_mpi",
+		"np": 28,
+		"model_devi_trust": 0.050,
+		"model_devi_f_trust_lo":	0.050,
+		"model_devi_f_trust_hi":	0.150,
+		"model_devi_e_trust_lo":	0.050,
+		"model_devi_e_trust_hi":	0.150,
+		"model_devi_jobs": [
+			{
+			"temps_lo": 2000,
+			"temps_hi": 2500,
+			"temps_divides": 7,
+			"temps_damp": 0.1,
+			"press_lo": 100,
+			"press_hi": 300,
+			"press_divides": 7,
+			"press_damp": 1,
+			"nsteps":	1000,
+			"nchoose":	200,
+			"trj_freq":	10,
+			"ensemble":	"npt"
+			}
+		]
+	}
+}

@@ -63,12 +63,6 @@ def Parser() -> "Namespace":
         required=False,
         help='scan recursively for OUTCAR files')
     parser.add_argument(
-        '-dir',
-        '--directory',
-        type=str,
-        default='.',
-        help='specify the directory contains POSCAR file')
-    parser.add_argument(
         '-out',
         '--output',
         type=str,
@@ -125,13 +119,6 @@ def perp() -> None:
                 poscars += get_poscar_files(item, args.recursive)
             else:
                 poscars.append(item)
-    else:
-        if not os.path.isdir(args.directory):
-            sys.stderr.write(
-                '-dir option is not a directory, exit\n')
-            return
-        else:
-            poscars = get_poscar_files(args.directory, args.recursive)
 
     # Get the unique list
     poscars = uniq(poscars)

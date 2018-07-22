@@ -2,3 +2,7 @@ iter
 param.json
 POSCAR
 .mypy_cache
+*.raw
+set*
+test.configs
+in*
