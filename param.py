@@ -310,7 +310,7 @@ def vasp_incar_kpoints_generate(vasp_data: Dict, poscar_index: int,
             ENCUT = {vasp_data['params']['encut']}
             EDIFF = {vasp_data['params']['ediff']} # default is large
             ALGO = Fast
-            LREAL = A                      # real space projection
+            LREAL = {vasp_data['params']['lreal']} # real space projection
             ISMEAR = -1 ; SIGMA = 0.130    # Fermi smearing: 1500 K 0.086 10-3
             ISYM = 0                       # no symmetry
             ISIF = 0                       # Not need stress tensor
@@ -430,6 +430,9 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_restart: bool):
 
         vasp_run(vasp_data, vasp_config_dir)
 
+        # Update outcar status
+        vasp_outcar_check(poscar_index, iter_index, vasp_data)
+
         # Finally update the poscar
         poscar_index += 1
 
@@ -459,6 +462,81 @@ def vasp_update_checkpoint(vasp_config_index: int, iter_index: int):
     #     # Write to the same file
     #     with open('generator_checkpoint.json', 'w') as generate_ckpt:
     #         json.dump(ckpt, generate_ckpt)
+
+
+def vasp_outcar_check(vasp_config_index: int, iter_index: int,
+                      vasp_data: Dict):
+    """Check outcar of every configuration and save to log
+
+    :vasp_config_index: int: TODO
+    :iter_index: int: TODO
+    :returns: TODO
+
+    """
+    iter_dir = f'iter_{iter_index}'
+    vasp_dir = os.path.join(iter_dir, 'vasp')
+    vasp_config_dir = os.path.join(vasp_dir, f'config_{vasp_config_index}')
+    outcar_path = os.path.join(vasp_config_dir, 'OUTCAR')
+    outcar_check_path = 'outcar_check.json'
+    vasp_outcar_trust = vasp_data['outcar_trust']
+    vasp_outcar_devi_trust = vasp_data['outcar_devi_trust']
+
+    outcar_check_dict: Dict = dict()
+    if os.path.exists(outcar_check_path):
+        with open(outcar_check_path) as outcar_check_file:
+            outcar_check_dict = json.load(outcar_check_file)
+
+    drift_dict: Dict = dict()
+    if vasp_config_index != 0:
+        drift_dict = outcar_check_dict[f'iter_{iter_index}']
+
+    # Parse OUTCAR
+    with open(outcar_path) as outcar_file:
+        for line in outcar_file:
+            if line.lstrip().startswith('POSITION'):
+                force_x: List = []  # noqa
+                force_y: List = []  # noqa
+                force_z: List = []  # noqa
+                outcar_file.readline()
+                line = outcar_file.readline()
+                while not line.lstrip().startswith('-----------'):
+                    pos_for_field = line.split()
+                    print(pos_for_field)
+                    force_x.append(float(pos_for_field[3]))
+                    force_y.append(float(pos_for_field[4]))
+                    force_z.append(float(pos_for_field[5]))
+                    line = outcar_file.readline()
+
+                # Start calculate standard deviation
+                force_x_devi = float(np.std(force_x))
+                force_y_devi = float(np.std(force_y))
+                force_z_devi = float(np.std(force_z))
+
+                drift_devi_flag = \
+                    force_x_devi < vasp_outcar_devi_trust and \
+                    force_y_devi < vasp_outcar_devi_trust and \
+                    force_z_devi < vasp_outcar_devi_trust
+
+                line = outcar_file.readline()
+
+                # Start calculate total drift
+                total_dirft = line.split()
+                drift_flag = \
+                    abs(float(total_dirft[2])) < vasp_outcar_trust \
+                    and abs(float(total_dirft[3])) < vasp_outcar_trust \
+                    and abs(float(total_dirft[4])) < vasp_outcar_trust
+
+                config_dict = dict()
+                config_dict['drift'] = drift_flag
+                config_dict['devi_force'] = drift_devi_flag
+                drift_dict[f'config_{vasp_config_index}'] = config_dict
+
+    # Finally Update dict
+    outcar_check_dict[f'iter_{iter_index}'] = drift_dict
+
+    # Update json file
+    with open(outcar_check_path, 'w') as outcar_check_file:
+        json.dump(outcar_check_dict, outcar_check_file)
 
 
 def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):

@@ -10,6 +10,7 @@
 
 import argparse
 import os
+import random
 import sys
 from typing import List
 
@@ -78,8 +79,14 @@ def Parser() -> "Namespace":
         '-div',
         '--divides',
         type=int,
-        default=100,
+        default=500,
         help='Set the divides of the density')
+    parser.add_argument(
+        '-si',
+        '--sigma',
+        type=float,
+        default=0.1,
+        help='Set the std_devi of the normal distribution')
     parser.add_argument(
         '-den',
         '--density',
@@ -132,6 +139,9 @@ def perp() -> None:
     # Get the centering density
     goal_density = args.density
 
+    # Get the pertupation std_devi
+    sigma = args.sigma
+
     # Get the output directory
     # output_dir = os.path.join(args.output, 'iter')
     output_dir = os.path.join('.', args.output)
@@ -168,7 +178,19 @@ def perp() -> None:
                            ratio) + 1)
             # print("density_ratio", density_ratio)
             configuration.cell = cell / pow(density_ratio, 1 / 3)
+
+            # Add random perturbation to the configurations
+            pert = (sigma**2 * np.random.standard_normal(
+                configuration.positions.shape) + 1)  # N(0, 0.1)
+            configuration.positions *= pert
+
             configuration.positions = positions / pow(density_ratio, 1 / 3)
+
+            # Renormalize the configuration
+            # TODO
+            # bias = np.where(configuration.cell < configuration.cell, configuration.cell, 0)
+
+
             print(positions)
 
             # Create configuration path

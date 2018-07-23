@@ -3,6 +3,8 @@
 		"sys_dir": "/home/tgzhou/Research/DeepMD/Hydrogen/perp_data/iter",
 		"np": 28,
 		"command": "/software/bin/vasp_std",
+		"outcar_trust": 0.00001,
+		"outcar_devi_trust": 0.00001,
 		"potential": ["/home/PAW_POT/paw_PBE/H_h/POTCAR"],
 		"params":	{
 		"encut":		600,
@@ -13,6 +15,7 @@
 		"npar":		7,
 		"ncore":	4,
 		"kpar":		4,
+		"lreal":	".False",
 		"_comment":	" that's all "
 		}
 	},
