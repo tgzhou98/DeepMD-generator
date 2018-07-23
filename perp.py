@@ -43,7 +43,7 @@ def get_poscar_files(directory: str, recursive: bool) -> List:
             'could not find any poscar files in this directory.\n')
     else:
         sys.stderr.write('found the following files:\n')
-        sys.stderr.write('  {}\n'.format(('\n  ').join(poscars)))
+        # sys.stderr.write('  {}\n'.format(('\n  ').join(poscars)))
         return poscars
     return poscars
 

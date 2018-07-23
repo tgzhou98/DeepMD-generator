@@ -80,7 +80,7 @@ def get_poscar_files(directory: str, recursive: bool) -> List:
             'could not find any poscar files in this directory.\n')
     else:
         sys.stderr.write('found the following files:\n')
-        sys.stderr.write('  {}\n'.format(('\n  ').join(poscars)))
+        # sys.stderr.write('  {}\n'.format(('\n  ').join(poscars)))
         return poscars
     return poscars
 
@@ -96,8 +96,11 @@ def parser() -> object:
     parser.add_argument(
         'file', type=str, help='Get the json configuration file')
 
-    parser.add_argument('-r', '--restart', action='store_true',
-                        help='Restart from the generator_checkpoint.json')
+    parser.add_argument(
+        '-r',
+        '--restart',
+        action='store_true',
+        help='Restart from the generator_checkpoint.json')
 
     args = parser.parse_args()
     return args
@@ -150,7 +153,7 @@ def generator():
     # initial index
     iter_index = 0
     need_restart = args.restart
-    have_restart_false = False
+    have_restarted = False
     ckpt = dict()
 
     # Check whether have to jump to a loop
@@ -160,6 +163,60 @@ def generator():
             ckpt = json.load(generate_ckpt)
             iter_index = ckpt['iter_index']
 
+    # ################################################
+    # HACK
+    # This implement is not so elegent
+    # First step of the whole loop
+    # ################################################
+    iter_dir = f'iter_{iter_index}'
+    # Start create iteration dir
+    if not os.path.exists(iter_dir):
+        os.makedirs(iter_dir)
+
+    if need_restart:
+        # status is vasp
+        if ckpt['status'] == 'vasp':
+
+            # Now process vasp iteration
+            vasp_dir = os.path.join(iter_dir, 'vasp')
+            if not os.path.exists(vasp_dir):
+                os.makedirs(vasp_dir)
+            vasp_iter(iter_index, vasp_data, need_restart)
+
+        if ckpt['status'] == 'vasp' or ckpt['status'] == 'deepmd':
+            # Now process deepmd iteration
+            deepmd_dir = os.path.join(iter_dir, 'deepmd')
+            if not os.path.exists(deepmd_dir):
+                os.makedirs(deepmd_dir)
+            deepmd_iter(iter_index, deepmd_data)
+
+        if ckpt['status'] == 'vasp' or ckpt['status'] == 'deepmd' \
+                or ckpt['status'] == 'lammps':
+            # Now process lammps iteration
+
+            # Get job index
+            model_devi_job_index = 0
+            for iter_accumulates_index, _ in enumerate(iter_number_list):
+                if iter_index < iter_number_list[iter_accumulates_index]:
+                    model_devi_job_index = iter_accumulates_index
+            # iteration before this job
+            iter_before_this_job = 0
+            if model_devi_job_index == 0:
+                iter_before_this_job = 0
+            else:
+                iter_before_this_job = iter_number_list[model_devi_job_index -
+                                                        1]
+
+            lmp_dir = os.path.join(iter_dir, 'lammps')
+            if not os.path.exists(lmp_dir):
+                os.makedirs(lmp_dir)
+            lmp_iter(iter_index, model_devi_job_index, iter_before_this_job,
+                     lmp_data, deepmd_data)
+
+            # Finally continue the loop
+            iter_index += 1
+
+    # enter full loop
     while iter_index < iter_number:
         iter_dir = f'iter_{iter_index}'
 
@@ -193,7 +250,6 @@ def generator():
         else:
             iter_before_this_job = iter_number_list[model_devi_job_index - 1]
 
-
         lmp_dir = os.path.join(iter_dir, 'lammps')
         if not os.path.exists(lmp_dir):
             os.makedirs(lmp_dir)
@@ -204,8 +260,7 @@ def generator():
         iter_index += 1
 
 
-def vasp_kpoints_generate(vasp_config_dir: str,
-                          vasp_data: Dict):
+def vasp_kpoints_generate(vasp_config_dir: str, vasp_data: Dict):
     """TODO: Docstring for vasp_kpoints_generate.
 
     :vasp_config_dir: str
@@ -318,7 +373,7 @@ def vasp_run(vasp_data: Dict, vasp_config_dir: str):
                    """)
 
 
-def vasp_iter(iter_index: int, vasp_data: Dict, restart: bool):
+def vasp_iter(iter_index: int, vasp_data: Dict, need_restart: bool):
     """Do vasp iteration
 
     :iter_index: int: TODO
@@ -348,10 +403,10 @@ def vasp_iter(iter_index: int, vasp_data: Dict, restart: bool):
     # vasp_backup_potcar_path = ''
 
     poscar_index = 0
-    if iter_index != 0:
+    if os.path.exists('generator_checkpoint.json'):
         with open('generator_checkpoint.json') as generate_ckpt:
             ckpt = json.load(generate_ckpt)
-            if restart:
+            if need_restart:
                 poscar_index = ckpt['config_index']
 
     poscar_file = poscars[poscar_index]
@@ -382,26 +437,28 @@ def vasp_iter(iter_index: int, vasp_data: Dict, restart: bool):
     # os.remove(vasp_backup_potcar_path)
 
 
-def vasp_update_checkpoint(vasp_config_index: int,
-                           iter_index: int):
+def vasp_update_checkpoint(vasp_config_index: int, iter_index: int):
     """TODO: Docstring for vasp_update_checkpoint.
     :returns: TODO
 
     """
-    if iter_index == 0 and vasp_config_index == 0:
-        with open('generator_checkpoint.json', 'w') as generate_ckpt:
-            ckpt: Dict = dict()
-            ckpt['status'] = 'vasp'
-            ckpt['config_index'] = vasp_config_index
-            ckpt['iter_index'] = iter_index
-            json.dump(ckpt, generate_ckpt)
-    else:
-        with open('generator_checkpoint.json', 'r+') as generate_ckpt:
-            ckpt = json.load(generate_ckpt)
-            ckpt['status'] = 'vasp'
-            ckpt['config_index'] = vasp_config_index
-            ckpt['iter_index'] = iter_index
-            json.dump(ckpt, generate_ckpt)
+    ckpt: Dict = dict()
+    # if iter_index == 0 and vasp_config_index == 0:
+    with open('generator_checkpoint.json', 'w') as generate_ckpt:
+        ckpt['status'] = 'vasp'
+        ckpt['config_index'] = vasp_config_index
+        ckpt['iter_index'] = iter_index
+        json.dump(ckpt, generate_ckpt)
+    # else:
+    #     with open('generator_checkpoint.json', 'r') as generate_ckpt:
+    #         ckpt = json.load(generate_ckpt)
+    #         ckpt['status'] = 'vasp'
+    #         ckpt['config_index'] = vasp_config_index
+    #         ckpt['iter_index'] = iter_index
+
+    #     # Write to the same file
+    #     with open('generator_checkpoint.json', 'w') as generate_ckpt:
+    #         json.dump(ckpt, generate_ckpt)
 
 
 def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):

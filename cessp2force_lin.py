@@ -57,7 +57,7 @@ def get_outcar_files(directory, recursive):
             'could not find any outcar files in this directory.\n')
     else:
         sys.stderr.write('found the following files:\n')
-        sys.stderr.write('  {}\n'.format(('\n  ').join(outcars)))
+        # sys.stderr.write('  {}\n'.format(('\n  ').join(outcars)))
         return outcars
     return outcars
 
