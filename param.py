@@ -373,7 +373,7 @@ def vasp_run(vasp_data: Dict, vasp_config_dir: str):
                    """)
 
 
-def vasp_iter(iter_index: int, vasp_data: Dict, need_restart: bool):
+def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
     """Do vasp iteration
 
     :iter_index: int: TODO
@@ -397,19 +397,27 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_restart: bool):
                                          'generated_poscar')
 
     # Get poscar
-    poscars = get_poscar_files(vasp_previous_dir, True)
+    # Divide poscar to several sets
+    # Determinal how many set are generated
+    poscar_set_list = [
+        get_poscar_files(poscar_set, True)
+        for poscar_set in os.listdir(vasp_previous_dir)
+    ]
 
     # Prepare data for vasp
     # vasp_backup_potcar_path = ''
 
-    poscar_index = 0
+    poscar_set_index = 0
+    poscar_config_index = 0
+    all_index = len([item for sublist in poscar_set_list for item in sublist])
     if os.path.exists('generator_checkpoint.json'):
         with open('generator_checkpoint.json') as generate_ckpt:
             ckpt = json.load(generate_ckpt)
-            if need_restart:
+            if need_continue:
                 poscar_index = ckpt['config_index']
+                poscar_config_index = ckpt['set_index']
 
-    while poscar_index < len(poscars):
+    while poscar_index < all_index:
         # BugFixed:
         # Need updata poscar in the previous dir
         poscar_file = poscars[poscar_index]
@@ -568,6 +576,7 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
                 vasp_dir_absolute, True)
             # Generate raw dir
             convert2raw.param_interface(test_configs_path_absolute)
+            print('generate_raw')
             if not deepmd_data['set_number']:
                 set_number = 8
             else:
@@ -575,7 +584,7 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             # Generate set
             set_size: int = 50 * (total_configs // set_number // 50)
             print(f'set size is {set_size}')
-            subprocess.run(["../raw_to_set.sh", f"{set_size}"])
+            subprocess.run(["../../raw_to_set.sh", f"{set_size}"])
 
     # Don't need copy set file, can specified in the json file
     # # Copy set directory to correponding deepmd_graph_dir
@@ -636,9 +645,13 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
     deepmd_data['training_params']['systems'] = sets_system_path
 
     deepmd_json_path = os.path.join(deepmd_graph_dir, 'deepmd.json')
-    with cd(deepmd_graph_dir):
-        with open(deepmd_json_path, 'w') as deepmd_json:
-            json.dump(deepmd_data['training_params'], deepmd_json, indent=2)
+
+    # Create if not have graph dir
+    if not os.path.exists(deepmd_graph_dir):
+        os.makedirs(deepmd_graph_dir)
+
+    with open(deepmd_json_path, 'w') as deepmd_json:
+        json.dump(deepmd_data['training_params'], deepmd_json, indent=2)
 
 
 def deepmd_mv_ckpt(iter_index: int, graph_index: int):
@@ -709,8 +722,6 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict):
         deepmd_graph_dir = os.path.join(deepmd_dir, f'graph_{graph_index}')
         # Prepare set files (generated from vasp)
         deepmd_raw_generate(vasp_dir, deepmd_dir, deepmd_data)
-        # Do some cleaning to save disk space
-        deepmd_clear_raw_test_configs(deepmd_dir)
         # Generate json
         deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
         # move previous model.ckpt if is not initial
@@ -718,7 +729,10 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict):
         # update deepmd check point
         deepmd_update_checkpoint(iter_index)
         # Traning and freezing the model
-        deepmd_run(deepmd_graph_dir, deepmd_data)
+        deepmd_run(iter_index, deepmd_graph_dir, deepmd_data)
+
+    # # Do some cleaning to save disk space
+    # deepmd_clear_raw_test_configs(deepmd_dir)
 
 
 def deepmd_update_checkpoint(iter_index: int):
@@ -726,11 +740,15 @@ def deepmd_update_checkpoint(iter_index: int):
     :returns: TODO
 
     """
-    with open('generator_checkpoint.json', 'r+') as generate_ckpt:
+    ckpt: Dict = dict()
+    with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'deepmd'
         ckpt['config_index'] = -1
         ckpt['iter_index'] = iter_index
+
+    # Dump to the same file and erase the former
+    with open('generator_checkpoint.json', 'w') as generate_ckpt:
         json.dump(ckpt, generate_ckpt, indent=2)
 
 
@@ -1008,11 +1026,14 @@ def lmp_update_checkpoint(iter_index: int):
     :returns: TODO
 
     """
-    with open('generator_checkpoint.json', 'r+') as generate_ckpt:
+    with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'lammps'
         ckpt['config_index'] = -1
         ckpt['iter_index'] = iter_index
+
+    # Update the json
+    with open('generator_checkpoint.json', 'w') as generate_ckpt:
         json.dump(ckpt, generate_ckpt, indent=2)
 
 

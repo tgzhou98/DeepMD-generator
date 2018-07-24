@@ -1,1 +1,30 @@
-{"iter_0": {"config_0": {"drift": true, "devi_force": true}, "config_1": {"drift": true, "devi_force": true}, "config_2": {"drift": true, "devi_force": true}}}
+{
+  "iter_0": {
+    "config_0": {
+      "drift": true,
+      "devi_force": true
+    },
+    "config_1": {
+      "drift": true,
+      "devi_force": true
+    },
+    "config_2": {
+      "drift": true,
+      "devi_force": true
+    },
+    "config_3": {
+      "drift": true,
+      "drift_data": [
+        "0.000026",
+        "-0.000148",
+        "-0.000156"
+      ],
+      "devi_force": true,
+      "devi_force_data": [
+        0.28166473000179554,
+        0.2166064757365301,
+        0.42290964937139186
+      ]
+    }
+  }
+}

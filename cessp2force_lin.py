@@ -166,7 +166,8 @@ def process_outcar_file_v5_dev(outcars, data, numbers, types, max_types, element
                              (box_y[0], box_y[1], box_y[2]))
                     fw.write("#Z %13.8f %13.8f %13.8f\n" %
                              (box_z[0], box_z[1], box_z[2]))
-                    fw.write("#W %f\n" % (args.weight))
+                    weight = 1.0
+                    fw.write("#W %f\n" % (weight))
                     fw.write("#E %.10f\n" % (energy))
                     if stress:
                         fw.write("#S ")
@@ -199,7 +200,9 @@ def process_outcar_file_v5_dev(outcars, data, numbers, types, max_types, element
                 for num in range(len(data[i][2])):
                     for k in range(data[i][2][num]):
                         line = [float(s) for s in f.readline().split()[0:6]]
-                        if args.c:
+                        # BIG HACK
+                        # JUST NOT USE THIS CONDITION
+                        if False:
                             adata[0] = int(types[data[i][1][num]])
                         else:
                             adata[0] = int(num)

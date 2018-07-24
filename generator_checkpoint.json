@@ -1,1 +1,5 @@
-{"status": "vasp", "config_index": 3, "iter_index": 0}
+{
+  "status": "deepmd",
+  "config_index": -1,
+  "iter_index": 0
+}
