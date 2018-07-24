@@ -8,3 +8,5 @@ test.configs
 in*
 dump*
 __*
+generator_checkpoint.json
+outcar_check.json

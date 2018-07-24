@@ -97,10 +97,10 @@ def parser() -> object:
         'file', type=str, help='Get the json configuration file')
 
     parser.add_argument(
-        '-r',
-        '--restart',
+        '-c',
+        '--continue_train',
         action='store_true',
-        help='Restart from the generator_checkpoint.json')
+        help='continue from the generator_checkpoint.json')
 
     args = parser.parse_args()
     return args
@@ -152,12 +152,12 @@ def generator():
 
     # initial index
     iter_index = 0
-    need_restart = args.restart
-    have_restarted = False
+    need_continue = args.continue_train
+    # have_continued = False
     ckpt = dict()
 
     # Check whether have to jump to a loop
-    if args.restart:
+    if args.continue_train:
         # load json file
         with open('generator_checkpoint.json') as generate_ckpt:
             ckpt = json.load(generate_ckpt)
@@ -173,7 +173,7 @@ def generator():
     if not os.path.exists(iter_dir):
         os.makedirs(iter_dir)
 
-    if need_restart:
+    if need_continue:
         # status is vasp
         if ckpt['status'] == 'vasp':
 
@@ -181,7 +181,7 @@ def generator():
             vasp_dir = os.path.join(iter_dir, 'vasp')
             if not os.path.exists(vasp_dir):
                 os.makedirs(vasp_dir)
-            vasp_iter(iter_index, vasp_data, need_restart)
+            vasp_iter(iter_index, vasp_data, need_continue)
 
         if ckpt['status'] == 'vasp' or ckpt['status'] == 'deepmd':
             # Now process deepmd iteration
@@ -228,7 +228,7 @@ def generator():
         vasp_dir = os.path.join(iter_dir, 'vasp')
         if not os.path.exists(vasp_dir):
             os.makedirs(vasp_dir)
-        vasp_iter(iter_index, vasp_data, need_restart)
+        vasp_iter(iter_index, vasp_data, need_continue)
 
         # Now process deepmd iteration
         deepmd_dir = os.path.join(iter_dir, 'deepmd')
@@ -409,9 +409,10 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_restart: bool):
             if need_restart:
                 poscar_index = ckpt['config_index']
 
-    poscar_file = poscars[poscar_index]
-
     while poscar_index < len(poscars):
+        # BugFixed:
+        # Need updata poscar in the previous dir
+        poscar_file = poscars[poscar_index]
         vasp_config_dir = os.path.join(vasp_dir, f'config_{poscar_index}')
         if not os.path.exists(vasp_config_dir):
             os.makedirs(vasp_config_dir)
@@ -451,7 +452,7 @@ def vasp_update_checkpoint(vasp_config_index: int, iter_index: int):
         ckpt['status'] = 'vasp'
         ckpt['config_index'] = vasp_config_index
         ckpt['iter_index'] = iter_index
-        json.dump(ckpt, generate_ckpt)
+        json.dump(ckpt, generate_ckpt, indent=2)
     # else:
     #     with open('generator_checkpoint.json', 'r') as generate_ckpt:
     #         ckpt = json.load(generate_ckpt)
@@ -528,7 +529,13 @@ def vasp_outcar_check(vasp_config_index: int, iter_index: int,
 
                 config_dict = dict()
                 config_dict['drift'] = drift_flag
+                config_dict['drift_data'] = [
+                    total_dirft[2], total_dirft[3], total_dirft[4]
+                ]
                 config_dict['devi_force'] = drift_devi_flag
+                config_dict['devi_force_data'] = [
+                    force_x_devi, force_y_devi, force_z_devi
+                ]
                 drift_dict[f'config_{vasp_config_index}'] = config_dict
 
     # Finally Update dict
@@ -536,7 +543,7 @@ def vasp_outcar_check(vasp_config_index: int, iter_index: int,
 
     # Update json file
     with open(outcar_check_path, 'w') as outcar_check_file:
-        json.dump(outcar_check_dict, outcar_check_file)
+        json.dump(outcar_check_dict, outcar_check_file, indent=2)
 
 
 def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
@@ -552,6 +559,8 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
     vasp_dir_absolute = os.path.abspath(vasp_dir)
     test_configs_path_absolute = os.path.join(deepmd_dir_absolute,
                                               'test.configs')
+    # print(test_configs_path_absolute)
+    # print(os.path.exists(test_configs_path_absolute))
     if not os.path.exists(test_configs_path_absolute):
         with cd(deepmd_dir_absolute):
             # Generate test_configs
@@ -566,7 +575,7 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             # Generate set
             set_size: int = 50 * (total_configs // set_number // 50)
             print(f'set size is {set_size}')
-            subprocess.run(["./raw_to_set.sh"], set_size)
+            subprocess.run(["../raw_to_set.sh", f"{set_size}"])
 
     # Don't need copy set file, can specified in the json file
     # # Copy set directory to correponding deepmd_graph_dir
@@ -590,7 +599,7 @@ def deepmd_clear_raw_test_configs(deepmd_dir: str):
         raw_file_list = [raw for raw in os.listdir('.') if raw.endswith('raw')]
         for raw_file in raw_file_list:
             os.remove(raw_file)
-        test_configs = os.path.join(deepmd_dir, 'test.configs')
+        test_configs = 'test.configs'
         os.remove(test_configs)
 
 
@@ -615,11 +624,12 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
         deepmd_data['training_params']['batch_size'] = deepmd_data[
             'sys_batch_size']
 
-    # decide whether restart
-    if iter_index == 0:
-        deepmd_data['training_params']['restart'] = False
-    else:
-        deepmd_data['training_params']['restart'] = True
+    # Deepmd version update, not set restart in json file but set in command line
+    # # decide whether restart
+    # if iter_index == 0:
+    #     deepmd_data['training_params']['restart'] = False
+    # else:
+    #     deepmd_data['training_params']['restart'] = True
 
     # set system path
     sets_system_path = os.path.join(deepmd_graph_dir, '..')
@@ -628,7 +638,7 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
     deepmd_json_path = os.path.join(deepmd_graph_dir, 'deepmd.json')
     with cd(deepmd_graph_dir):
         with open(deepmd_json_path, 'w') as deepmd_json:
-            json.dump(deepmd_data['training_params'], deepmd_json)
+            json.dump(deepmd_data['training_params'], deepmd_json, indent=2)
 
 
 def deepmd_mv_ckpt(iter_index: int, graph_index: int):
@@ -651,7 +661,7 @@ def deepmd_mv_ckpt(iter_index: int, graph_index: int):
                 shutil.move(model_ckpt, iter_graph_dir)
 
 
-def deepmd_run(deepmd_graph_dir: str, deepmd_data: Dict):
+def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict):
     """Train and freeze the graph in the deepmd_graph_dir
 
     :deepmd_graph_dir: str: TODO
@@ -666,7 +676,12 @@ def deepmd_run(deepmd_graph_dir: str, deepmd_data: Dict):
         deepmd_json_path = os.path.join('.', 'deepmd.json')
         deepmd_train_start_time = time.time()
         # Not set OMP number, use the default
-        subprocess.run([dp_train_path, deepmd_json_path])
+
+        # Check if restart
+        if iter_index == 0:
+            subprocess.run([dp_train_path, deepmd_json_path])
+        else:
+            subprocess.run([dp_train_path, deepmd_json_path, '--restart'])
         deepmd_train_end_time = time.time()
         print(
             f'Traning end, take {deepmd_train_end_time - deepmd_train_start_time}s\n'
@@ -716,7 +731,7 @@ def deepmd_update_checkpoint(iter_index: int):
         ckpt['status'] = 'deepmd'
         ckpt['config_index'] = -1
         ckpt['iter_index'] = iter_index
-        json.dump(ckpt, generate_ckpt)
+        json.dump(ckpt, generate_ckpt, indent=2)
 
 
 def lmp_in_generate(iter_index: int, model_devi_job_index: int,
@@ -764,7 +779,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
             press_damp = model_devi_jobs[model_devi_job_index]['press_damp']
 
         # Set fix command
-        fix_str = f'fix 1 all npt temp $t $t ${{td}} iso $p $p ${{pd}}'
+        fix_str = f'fix 1 all npt temp $t $t ${{td}} tri $p $p ${{pd}}'
     elif model_devi_jobs[model_devi_job_index]['ensemble'] == 'nvt':
         temps_group = new_iter_index % temps_divides
         temps = temps_lo + (temps_hi - temps_lo) * temps_group / (
@@ -792,6 +807,7 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
         atom_style  atomic
 
         # geometry
+        box tilt large
         read_data	data.pos
 
         # deepmd potential
@@ -997,7 +1013,7 @@ def lmp_update_checkpoint(iter_index: int):
         ckpt['status'] = 'lammps'
         ckpt['config_index'] = -1
         ckpt['iter_index'] = iter_index
-        json.dump(ckpt, generate_ckpt)
+        json.dump(ckpt, generate_ckpt, indent=2)
 
 
 def copytree(src, dst, symlinks=False, ignore=None):

@@ -79,13 +79,13 @@ def Parser() -> "Namespace":
         '-div',
         '--divides',
         type=int,
-        default=500,
+        default=400,
         help='Set the divides of the density')
     parser.add_argument(
         '-si',
         '--sigma',
         type=float,
-        default=0.1,
+        default=0.2,
         help='Set the std_devi of the normal distribution')
     parser.add_argument(
         '-den',
@@ -182,16 +182,17 @@ def perp() -> None:
             # Add random perturbation to the configurations
             pert = (sigma**2 * np.random.standard_normal(
                 configuration.positions.shape) + 1)  # N(0, 0.1)
-            configuration.positions *= pert
 
-            configuration.positions = positions / pow(density_ratio, 1 / 3)
+            print(configuration.positions -
+                  positions * pert / pow(density_ratio, 1 / 3))
+            configuration.positions = positions * pert / pow(
+                density_ratio, 1 / 3)
 
             # Renormalize the configuration
             # TODO
             # bias = np.where(configuration.cell < configuration.cell, configuration.cell, 0)
 
-
-            print(positions)
+            # print(positions)
 
             # Create configuration path
             config_path = os.path.join(set_path, f'config_{new_config_index}')
