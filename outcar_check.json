@@ -1,30 +1,136 @@
 {
   "iter_0": {
-    "config_0": {
-      "drift": true,
-      "devi_force": true
+    "set_0": {
+      "config_0": {
+        "drift": false,
+        "drift_data": [
+          0.000194,
+          0.000662,
+          -0.000509
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.24845714017850964,
+          0.24665112498603164,
+          0.32232981543007094
+        ]
+      },
+      "config_1": {
+        "drift": false,
+        "drift_data": [
+          -8.9e-05,
+          -0.00035,
+          -0.001285
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.18909429666917138,
+          0.17757285988925783,
+          0.3003723737184137
+        ]
+      },
+      "config_399": {
+        "drift": false,
+        "drift_data": [
+          -0.000374,
+          -0.000333,
+          -0.000165
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.24759545968662997,
+          0.27298297901436747,
+          0.2238101354264927
+        ]
+      },
+      "config_400": {
+        "drift": false,
+        "drift_data": [
+          -0.000296,
+          5.2e-05,
+          0.000187
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.1931029143088177,
+          0.344262739780766,
+          0.16903450204983114
+        ]
+      }
     },
-    "config_1": {
-      "drift": true,
-      "devi_force": true
+    "set_1": {
+      "config_0": {
+        "drift": false,
+        "drift_data": [
+          1.2e-05,
+          3.8e-05,
+          -0.000286
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.13753641108742293,
+          0.14165068689582339,
+          0.24327481014430985
+        ]
+      },
+      "config_1": {
+        "drift": false,
+        "drift_data": [
+          -9.1e-05,
+          0.000202,
+          -0.000232
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.29493648114403376,
+          0.3817187768392131,
+          0.2985515904353886
+        ]
+      },
+      "config_2": {
+        "drift": false,
+        "drift_data": [
+          4.2e-05,
+          -8e-05,
+          0.000237
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.2569435713960363,
+          0.2156808568048138,
+          0.3363547918097422
+        ]
+      },
+      "config_3": {
+        "drift": false,
+        "drift_data": [
+          0.000408,
+          -0.000374,
+          0.000572
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.23486372034221117,
+          0.36992406252058596,
+          0.32586188329072385
+        ]
+      }
     },
-    "config_2": {
-      "drift": true,
-      "devi_force": true
-    },
-    "config_3": {
-      "drift": true,
-      "drift_data": [
-        "0.000026",
-        "-0.000148",
-        "-0.000156"
-      ],
-      "devi_force": true,
-      "devi_force_data": [
-        0.28166473000179554,
-        0.2166064757365301,
-        0.42290964937139186
-      ]
+    "set_2": {
+      "config_400": {
+        "drift": false,
+        "drift_data": [
+          -0.001193,
+          -0.001045,
+          0.00017
+        ],
+        "devi_force": true,
+        "devi_force_data": [
+          0.292926617983171,
+          0.36787078413613333,
+          0.2412286765561472
+        ]
+      }
     }
   }
 }
