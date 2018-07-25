@@ -20,7 +20,6 @@ from itertools import compress
 from pathlib import Path
 from typing import Dict, List, Set
 
-import matplotlib.pyplot as plt
 import numpy as np
 from ase import io
 
@@ -601,19 +600,35 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
     :returns: TODO
 
     """
-    deepmd_dir_absolute = os.path.abspath(deepmd_dir)
-    vasp_dir_absolute = os.path.abspath(vasp_dir)
-    test_configs_path_absolute = os.path.join(deepmd_dir_absolute,
-                                              'test.configs')
+    vasp_set_list = [
+        os.path.join(vasp_dir, vasp_set_dir_name)
+        for vasp_set_dir_name in os.listdir(vasp_dir)
+        if vasp_set_dir_name.startswith('set')
+    ]
+    vasp_set_list_absolute = [
+        os.path.abspath(vasp_set) for vasp_set in vasp_set_list
+    ]
+    deepmd_set_dir_list = [
+        os.path.join(deepmd_dir, 'data', f'deepmd_set_{set_index}')
+        for set_index in range(len(vasp_set_list))
+    ]
+    deepmd_set_dir_list_absolute = [
+        os.path.abspath(deepmd_set) for deepmd_set in deepmd_set_dir_list
+    ]
+
     # print(test_configs_path_absolute)
     # print(os.path.exists(test_configs_path_absolute))
-    if not os.path.exists(test_configs_path_absolute):
-        with cd(deepmd_dir_absolute):
+    for set_index, deepmd_set_absolute in enumerate(
+            deepmd_set_dir_list_absolute):
+        if not os.path.exists(deepmd_set_absolute):
+            os.makedirs(deepmd_set_absolute)
+        with cd(deepmd_set_absolute):
             # Generate test_configs
             total_configs = cessp2force_lin.param_interface(
-                vasp_dir_absolute, True)
+                vasp_set_list_absolute[set_index], True)
             # Generate raw dir
-            convert2raw.param_interface(test_configs_path_absolute)
+            test_configs_absolute = os.path.abspath('test.configs')
+            convert2raw.param_interface(test_configs_absolute)
             print('generate_raw')
             if not deepmd_data['set_number']:
                 set_number = 8
@@ -622,7 +637,12 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             # Generate set
             set_size: int = 50 * (total_configs // set_number // 50)
             print(f'set size is {set_size}')
-            subprocess.run(["../../raw_to_set.sh", f"{set_size}"])
+            # Remove set
+            print("remove set")
+            for set_dir in os.listdir('.'):
+                if set_dir.startswith('set') and os.path.isdir(set_dir):
+                    shutil.rmtree(set_dir)
+            subprocess.run(["../../../../raw_to_set.sh", f"{set_size}"])
 
     # Don't need copy set file, can specified in the json file
     # # Copy set directory to correponding deepmd_graph_dir
@@ -679,8 +699,15 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
     #     deepmd_data['training_params']['restart'] = True
 
     # set system path
-    sets_system_path = os.path.join(deepmd_graph_dir, '..')
-    deepmd_data['training_params']['systems'] = sets_system_path
+    # Bug Fixed
+    # Now use relative path
+    with cd(deepmd_graph_dir):
+        sets_system_relative_path = os.path.join('..', 'data')
+        sets_system_list = [
+            os.path.join(sets_system_relative_path, deepmd_set_dir)
+            for deepmd_set_dir in os.listdir(sets_system_relative_path)
+        ]
+    deepmd_data['training_params']['systems'] = sets_system_list
 
     deepmd_json_path = os.path.join(deepmd_graph_dir, 'deepmd.json')
 
@@ -756,10 +783,21 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
     iter_dir = os.path.join('.', f'iter_{iter_index}')
     vasp_dir = os.path.join(iter_dir, 'vasp')
     deepmd_dir = os.path.join(iter_dir, 'deepmd')
-    for graph_index in range(deepmd_data['numb_models']):
+
+    # TODO
+    # DONE
+    # Continue function
+    graph_index = 0
+    if os.path.exists('generator_checkpoint.json'):
+        with open('generator_checkpoint.json') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            if need_continue:
+                graph_index = ckpt['config_index']
+
+    # Prepare set files (generated from vasp)
+    deepmd_raw_generate(vasp_dir, deepmd_dir, deepmd_data)
+    while graph_index < deepmd_data['numb_models']:
         deepmd_graph_dir = os.path.join(deepmd_dir, f'graph_{graph_index}')
-        # Prepare set files (generated from vasp)
-        deepmd_raw_generate(vasp_dir, deepmd_dir, deepmd_data)
         # Generate json
         deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
         # move previous model.ckpt if is not initial
@@ -768,6 +806,9 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
         deepmd_update_checkpoint(iter_index, graph_index)
         # Traning and freezing the model
         deepmd_run(iter_index, deepmd_graph_dir, deepmd_data)
+
+        # Update index
+        graph_index += 1
 
     # # Do some cleaning to save disk space
     # deepmd_clear_raw_test_configs(deepmd_dir)

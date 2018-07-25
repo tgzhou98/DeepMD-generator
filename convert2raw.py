@@ -3,6 +3,7 @@
 import argparse
 import re
 import sys
+
 import numpy as np
 
 
@@ -79,7 +80,10 @@ def param_interface(test_configs_path_absolute: str):
     # np.savetxt ('virial.raw', virial9[idx])
     np.savetxt('coord.raw', coord[idx])
     np.savetxt('force.raw', force[idx])
-    np.savetxt('type.raw', mytype[0], fmt='%d')
+    # Pay attention!!!!!!!!
+    # The type should export in a line, so the shape is (1,16))
+    np.savetxt('type.raw', mytype[0:1, :], fmt='%d')
+    # print('mytype.shape', mytype.shape)
 
 
 def _main():
@@ -140,7 +144,7 @@ def _main():
     # np.savetxt ('virial.raw', virial9[idx])
     np.savetxt('coord.raw', coord[idx])
     np.savetxt('force.raw', force[idx])
-    np.savetxt('type.raw', mytype[0], fmt='%d')
+    np.savetxt('type.raw', mytype[0:], fmt='%d')
 
 
 if __name__ == "__main__":
