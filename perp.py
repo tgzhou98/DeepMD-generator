@@ -172,7 +172,10 @@ def perp() -> None:
         # print('mass', configuration.get_masses())
         # print('goal_density', goal_density)
 
-        for new_config_index in range(divides + 1):
+        # FIXME
+        # Never let range to (divides + 1)
+        # Deepmd may have bug to generate data
+        for new_config_index in range(divides):
             density_ratio = goal_density / density * \
                         (((new_config_index - divides // 2) / divides *
                            ratio) + 1)

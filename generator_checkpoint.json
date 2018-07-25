@@ -1,6 +1,6 @@
 {
-  "status": "deepmd",
-  "config_index": 0,
-  "set_index": -1,
+  "status": "vasp",
+  "config_index": 399,
+  "set_index": 2,
   "iter_index": 0
 }

@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from itertools import compress
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Dict, List, Set
 
@@ -348,7 +349,7 @@ def vasp_potcar_generate(vasp_data: Dict, vasp_config_dir: str, vasp_dir: str):
                 with open(fname) as infile:
                     for line in infile:
                         vasp_potcar_file.write(line)
-    print(vasp_backup_potcar_path)
+    # print(vasp_backup_potcar_path)
     # if the potcar is generated
     shutil.copyfile(vasp_backup_potcar_path, vasp_potcar_path)
 
@@ -524,11 +525,11 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
 
     if f'iter_{iter_index}' in outcar_check_dict:
         set_dict = outcar_check_dict[f'iter_{iter_index}']
-    print(set_dict)
+    # print(set_dict)
 
     if f'set_{vasp_set_index}' in set_dict:
         drift_dict = set_dict[f'set_{vasp_set_index}']
-    print(drift_dict)
+    # print(drift_dict)
 
     # Parse OUTCAR
     with open(outcar_path) as outcar_file:
@@ -541,7 +542,7 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
                 line = outcar_file.readline()
                 while not line.lstrip().startswith('-----------'):
                     pos_for_field = line.split()
-                    print(pos_for_field)
+                    # print(pos_for_field)
                     force_x.append(float(pos_for_field[3]))
                     force_y.append(float(pos_for_field[4]))
                     force_z.append(float(pos_for_field[5]))
@@ -579,7 +580,7 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
                 ]
                 drift_dict[f'config_{vasp_config_index}'] = config_dict
 
-    print(drift_dict)
+    # print(drift_dict)
     # Finally Update dict
     # TODO
     # HAVE BUG
@@ -618,6 +619,10 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
 
     # print(test_configs_path_absolute)
     # print(os.path.exists(test_configs_path_absolute))
+    # TODO
+    # HACK multiprocess never done
+    # process = Pool(8)
+
     for set_index, deepmd_set_absolute in enumerate(
             deepmd_set_dir_list_absolute):
         if not os.path.exists(deepmd_set_absolute):
@@ -637,12 +642,13 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             # Generate set
             set_size: int = 50 * (total_configs // set_number // 50)
             print(f'set size is {set_size}')
-            # Remove set
-            print("remove set")
+            # # Remove set
+            # print("remove set")
             for set_dir in os.listdir('.'):
                 if set_dir.startswith('set') and os.path.isdir(set_dir):
                     shutil.rmtree(set_dir)
-            subprocess.run(["../../../../raw_to_set.sh", f"{set_size}"])
+            code = subprocess.run(["../../../../raw_to_set.sh", f"{set_size}"])
+            print(f'return code {code}')
 
     # Don't need copy set file, can specified in the json file
     # # Copy set directory to correponding deepmd_graph_dir
@@ -727,7 +733,7 @@ def deepmd_mv_ckpt(iter_index: int, graph_index: int):
 
     """
     iter_dir = f'iter_{iter_index}'
-    # mv when not inital
+    # mv when not initial
     if iter_index != 0:
         iter_previous_dir = f'iter_{iter_index - 1}'
         iter_previous_graph_dir = os.path.join(iter_previous_dir, 'deepmd',
@@ -739,7 +745,8 @@ def deepmd_mv_ckpt(iter_index: int, graph_index: int):
                 shutil.move(model_ckpt, iter_graph_dir)
 
 
-def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict):
+def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
+               need_continue: bool):
     """Train and freeze the graph in the deepmd_graph_dir
 
     :deepmd_graph_dir: str: TODO
@@ -752,22 +759,23 @@ def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict):
     print(f'Now start training in the deepmd_graph_dir {deepmd_graph_dir}\n')
     with cd(deepmd_graph_dir):
         deepmd_json_path = os.path.join('.', 'deepmd.json')
-        deepmd_train_start_time = time.time()
         # Not set OMP number, use the default
 
+        print("enter_traina_dir", file=sys.stderr)
+        print("need_continue_run", need_continue, file=sys.stderr)
         # Check if restart
-        if iter_index == 0:
-            subprocess.run([dp_train_path, deepmd_json_path])
+        if not need_continue:
+            if iter_index == 0:
+                subprocess.run([dp_train_path, deepmd_json_path])
+            else:
+                subprocess.run([
+                    dp_train_path, deepmd_json_path, '--initial', 'model.ckpt'
+                ])
         else:
-            subprocess.run([dp_train_path, deepmd_json_path, '--restart'])
-        deepmd_train_end_time = time.time()
-        print(
-            f'Traning end, take {deepmd_train_end_time - deepmd_train_start_time}s\n'
-        )
+            subprocess.run(
+                [dp_train_path, deepmd_json_path, '--restart', 'model.ckpt'])
         # Start freeze model
-        print(
-            f'Now start freezing the graph in the deepmd_graph_dir {deepmd_graph_dir}\n'
-        )
+        print(f'Now start freezing the graph in the {deepmd_graph_dir}\n')
         subprocess.run([dp_frz_path])
         print(f'Freezing end\n')
 
@@ -786,32 +794,75 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
 
     # TODO
     # DONE
-    # Continue function
-    graph_index = 0
-    if os.path.exists('generator_checkpoint.json'):
-        with open('generator_checkpoint.json') as generate_ckpt:
-            ckpt = json.load(generate_ckpt)
-            if need_continue:
-                graph_index = ckpt['config_index']
+    # Not need continue function
+    # use multiprocess instead
 
     # Prepare set files (generated from vasp)
     deepmd_raw_generate(vasp_dir, deepmd_dir, deepmd_data)
-    while graph_index < deepmd_data['numb_models']:
-        deepmd_graph_dir = os.path.join(deepmd_dir, f'graph_{graph_index}')
-        # Generate json
-        deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
-        # move previous model.ckpt if is not initial
-        deepmd_mv_ckpt(iter_index, graph_index)
-        # update deepmd check point
-        deepmd_update_checkpoint(iter_index, graph_index)
-        # Traning and freezing the model
-        deepmd_run(iter_index, deepmd_graph_dir, deepmd_data)
 
-        # Update index
-        graph_index += 1
+    process = Pool(deepmd_data['numb_models'])
+    for graph_index in range(deepmd_data['numb_models']):
+        deepmd_graph_dir = os.path.join(deepmd_dir, f'graph_{graph_index}')
+        if not os.path.exists(deepmd_graph_dir):
+            os.makedirs(deepmd_graph_dir)
+        print("need_continue", need_continue)
+        if need_continue:
+            process.apply_async(
+                deepmd_single_process_continue_iter,
+                args=(graph_index, deepmd_graph_dir, deepmd_data, iter_index,
+                      need_continue))
+        else:
+            process.apply_async(
+                deepmd_single_process_initial_iter,
+                args=(graph_index, deepmd_graph_dir, deepmd_data, iter_index,
+                      need_continue))
+    process.close()
+    process.join()
+    print('All subprocess done')
 
     # # Do some cleaning to save disk space
     # deepmd_clear_raw_test_configs(deepmd_dir)
+
+
+def deepmd_single_process_initial_iter(graph_index: int, deepmd_graph_dir: str,
+                                       deepmd_data: Dict, iter_index: int,
+                                       need_continue: bool):
+    """auxiliary function to do single process deepmd
+
+    :graph_index: int: TODO
+    :deepmd_graph_dir: str: TODO
+    :deepmd_data: Dict: TODO
+    :iter_index: int: TODO
+    :need_continue: bool: TODO
+    :returns: TODO
+
+    """
+    # Generate json
+    deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
+    # move previous model.ckpt if is not initial
+    deepmd_mv_ckpt(iter_index, graph_index)
+    # update deepmd check point
+    deepmd_update_checkpoint(iter_index, graph_index)
+    # Traning and freezing the model
+    deepmd_run(iter_index, deepmd_graph_dir, deepmd_data, need_continue)
+
+
+def deepmd_single_process_continue_iter(
+        graph_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
+        iter_index: int, need_continue: bool):
+    """deepmd_single_process function for continue mode
+
+    :param graph_index:
+    :type graph_index: int
+    :param deepmd_graph_dir:
+    :type deepmd_graph_dir: str
+    :param deepmd_data:
+    :type deepmd_data: Dict
+    :param iter_index:
+    :type iter_index: int
+    """
+    # Traning and freezing the model
+    deepmd_run(iter_index, deepmd_graph_dir, deepmd_data, need_continue)
 
 
 def deepmd_update_checkpoint(iter_index: int, graph_index: int):
@@ -823,7 +874,7 @@ def deepmd_update_checkpoint(iter_index: int, graph_index: int):
     with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'deepmd'
-        ckpt['config_index'] = graph_index  # use config_index to replace graph
+        ckpt['config_index'] = -1  # multiprocessing don't need graph_index
         ckpt['set_index'] = -1
         ckpt['iter_index'] = iter_index
 

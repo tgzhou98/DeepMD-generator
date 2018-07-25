@@ -1,7 +1,7 @@
 {
 	"vasp": {
 		"sys_dir": "/home/tgzhou/Research/DeepMD/Hydrogen/perp_data/iter",
-		"np": 24,
+		"np": 28,
 		"command": "/software/bin/vasp_std",
 		"outcar_trust": 0.0002,
 		"outcar_devi_trust": 0.5,
@@ -12,9 +12,9 @@
 		"using_kspacing_not_kmesh": true,
 		"kspacing":	0.25,
 		"kmesh":	[4, 4, 4],
-		"npar":		6,
+			"npar": 7,
 		"ncore":	4,
-		"kpar":		4,
+			"kpar": 2,
 		"lreal":	"A",
 		"_comment":	" that's all "
 		}
@@ -25,13 +25,15 @@
 		"_comment":	"These batch will change batch size in the training_params",
 		"sys_batch_size":	2,
 		"init_batch_size":	8,
-		"set_number":	6,
+		"set_number": 4,
 		"training_params": {
 			"_comment": " model parameters",
 			"use_smooth":	true,
-			"sel_a":		[72],
-			"rcut_smth":	1.80,
-			"rcut":		2.00,
+			"sel_a": [
+				480
+			],
+			"rcut_smth": 5.30,
+			"rcut": 5.50,
 			"filter_neuron":	[25, 50, 100],
 			"filter_resnet_dt":	false,
 			"n_axis_neuron":	16,
@@ -58,9 +60,9 @@
 			"_comment": " display and restart",
 			"_comment": " frequencies counted in batch",
 			"disp_file":	"lcurve.out",
-			"disp_freq":	10,
+			"disp_freq": 5000,
 			"numb_test":	10,
-			"save_freq":	10,
+			"save_freq": 5000,
 			"save_ckpt":	"model.ckpt",
 			"load_ckpt":	"model.ckpt",
 			"disp_training":	true,
