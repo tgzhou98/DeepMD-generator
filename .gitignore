@@ -2,7 +2,6 @@ generator_checkpoint.json
 outcar_check.json
 iter*
 param.json
-POSCAR
 .mypy_cache
 *.raw
 set*
@@ -10,3 +9,4 @@ test.configs
 in*
 dump*
 __*
+.idea

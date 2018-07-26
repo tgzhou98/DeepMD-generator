@@ -18,7 +18,6 @@ import sys
 import time
 from itertools import compress
 from multiprocessing import Pool
-from pathlib import Path
 from typing import Dict, List, Set
 
 import numpy as np
@@ -57,12 +56,12 @@ class cd:
 def get_poscar_files(directory: str, recursive: bool) -> List:
     """Get the POSCAR file in the recursive mode
 
-    :directory: TODO
-    :returns: TODO
+    :directory: 
+    :returns: 
 
     """
     # walk directory (recursively) and return all poscar* files
-    # return list of poscars' path
+    # return list of poscar path
     sys.stderr.write(
         'searching directory %s for poscar* files ...\n' % directory)
     poscars = []
@@ -88,7 +87,7 @@ def get_poscar_files(directory: str, recursive: bool) -> List:
 
 def parser() -> object:
     """Parser file from command line
-    :returns: TODO
+    :returns: 
 
     """
     parser = argparse.ArgumentParser(
@@ -107,7 +106,7 @@ def parser() -> object:
     return args
 
 
-def uniq(seq: List) -> List:
+def unique(seq: List) -> List:
     # return unique list without changing the order
     # from http://stackoverflow.com/questions/480214
     seen: Set = set()
@@ -119,10 +118,10 @@ def generator():
     """General iterations
     Implement the first iteration in the vasp_iter() function
     get initial poscar from vasp_sys_dir
-    :returns: TODO
+    :returns: 
 
     """
-    args = parser()
+    args: object = parser()
 
     data = {}
     with open(args.file, "r") as json_file:
@@ -139,7 +138,7 @@ def generator():
     for model_devi_job in lmp_data['model_devi_jobs']:
         if model_devi_job['ensemble'] == 'npt':
             iter_number += model_devi_job['temps_divides'] * \
-                model_devi_job['press_divides']
+                           model_devi_job['press_divides']
             iter_number_list.append(iter_number)
         elif model_devi_job['ensemble'] == 'nvt':
             iter_number += model_devi_job['temps_divides']
@@ -155,7 +154,6 @@ def generator():
     iter_index = 0
     need_continue = args.continue_train
     initial_status = ''  # initial checkpoint shouldn't change
-    ckpt = dict()
 
     # Check whether have to jump to a loop
     if args.continue_train:
@@ -196,27 +194,14 @@ def generator():
         if initial_status == 'vasp' or initial_status == 'deepmd' or \
                 initial_status == 'lammps':
             # Now process lammps iteration
-
-            # Get job index
-            model_devi_job_index = 0
-            for iter_accumulates_index, _ in enumerate(iter_number_list):
-                if iter_index < iter_number_list[iter_accumulates_index]:
-                    model_devi_job_index = iter_accumulates_index
-            # iteration before this job
-            iter_before_this_job = 0
-            if model_devi_job_index == 0:
-                iter_before_this_job = 0
-            else:
-                iter_before_this_job = iter_number_list[model_devi_job_index -
-                                                        1]
-
+            # 
+            # Fix lmp_iter function
             lmp_dir = os.path.join(iter_dir, 'lammps')
             if not os.path.exists(lmp_dir):
                 os.makedirs(lmp_dir)
-            # TODO
+            # 
             # Maybe lmp_iter should have continue mode
-            lmp_iter(iter_index, model_devi_job_index, iter_before_this_job,
-                     lmp_data, deepmd_data)
+            lmp_iter(iter_index, lmp_data, deepmd_data, (initial_status == 'lammps'))
 
             # Finally continue the loop
             iter_index += 1
@@ -243,34 +228,21 @@ def generator():
 
         # Now process lammps iteration
 
-        # Get job index
-        model_devi_job_index = 0
-        for iter_accumulates_index, _ in enumerate(iter_number_list):
-            if iter_index < iter_number_list[iter_accumulates_index]:
-                model_devi_job_index = iter_accumulates_index
-        # iteration before this job
-        iter_before_this_job = 0
-        if model_devi_job_index == 0:
-            iter_before_this_job = 0
-        else:
-            iter_before_this_job = iter_number_list[model_devi_job_index - 1]
-
         lmp_dir = os.path.join(iter_dir, 'lammps')
         if not os.path.exists(lmp_dir):
             os.makedirs(lmp_dir)
-        lmp_iter(iter_index, model_devi_job_index, iter_before_this_job,
-                 lmp_data, deepmd_data)
+        lmp_iter(iter_index, lmp_data, deepmd_data, False)
 
         # Finally continue the loop
         iter_index += 1
 
 
 def vasp_kpoints_generate(vasp_config_dir: str, vasp_data: Dict):
-    """TODO: Docstring for vasp_kpoints_generate.
+    """: Docstring for vasp_kpoints_generate.
 
     :vasp_config_dir: str
-    :vasp_data: Dict: TODO
-    :returns: TODO
+    :vasp_data: Dict: 
+    :returns: 
 
     """
     vasp_kpoints_path = os.path.join(vasp_config_dir, 'KPOINTS')
@@ -291,8 +263,8 @@ def vasp_incar_kpoints_generate(vasp_data: Dict, vasp_config_dir: str,
                                 vasp_dir: str):
     """Generate INCAR for vasp
 
-    :vasp_params: Dict: TODO
-    :returns: TODO
+    :vasp_params: Dict: 
+    :returns: 
 
     """
     vasp_incar_path = os.path.join(vasp_config_dir, 'INCAR')
@@ -332,11 +304,11 @@ def vasp_incar_kpoints_generate(vasp_data: Dict, vasp_config_dir: str,
 
 
 def vasp_potcar_generate(vasp_data: Dict, vasp_config_dir: str, vasp_dir: str):
-    """TODO: Docstring for vasp_potcar_generate.
+    """: Docstring for vasp_potcar_generate.
 
-    :vasp_params: Dict: TODO
-    :vasp_config_dir: str: TODO
-    :returns: TODO
+    :vasp_params: Dict: 
+    :vasp_config_dir: str: 
+    :returns: 
 
     """
     vasp_potcar_path = os.path.join(vasp_config_dir, 'POTCAR')
@@ -357,9 +329,9 @@ def vasp_potcar_generate(vasp_data: Dict, vasp_config_dir: str, vasp_dir: str):
 def vasp_run(vasp_data: Dict, vasp_config_dir: str):
     """Run vasp file
 
-    :vasp_data: Dict: TODO
-    :vasp_config_dir: str: TODO
-    :returns: TODO
+    :vasp_data: Dict: 
+    :vasp_config_dir: str: 
+    :returns: 
 
     """
     with cd(vasp_config_dir):
@@ -377,9 +349,9 @@ def vasp_run(vasp_data: Dict, vasp_config_dir: str):
 def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
     """Do vasp iteration
 
-    :iter_index: int: TODO
-    :vasp_data: Dict: TODO
-    :returns: TODO
+    :iter_index: int: 
+    :vasp_data: Dict: 
+    :returns: 
 
     """
     iter_dir = f'iter_{iter_index}'
@@ -470,8 +442,8 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
 
 def vasp_update_checkpoint(vasp_set_index, vasp_config_index: int,
                            iter_index: int):
-    """TODO: Docstring for vasp_update_checkpoint.
-    :returns: TODO
+    """: Docstring for vasp_update_checkpoint.
+    :returns: 
 
     """
     ckpt: Dict = dict()
@@ -498,9 +470,9 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
                       iter_index: int, vasp_data: Dict):
     """Check outcar of every configuration and save to log
 
-    :vasp_config_index: int: TODO
-    :iter_index: int: TODO
-    :returns: TODO
+    :vasp_config_index: int: 
+    :iter_index: int: 
+    :returns: 
 
     """
     iter_dir = f'iter_{iter_index}'
@@ -582,7 +554,7 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
 
     # print(drift_dict)
     # Finally Update dict
-    # TODO
+    # 
     # HAVE BUG
     set_dict[f'set_{vasp_set_index}'] = drift_dict
     outcar_check_dict[f'iter_{iter_index}'] = set_dict
@@ -595,10 +567,10 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
 def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
     """Generate raw data for deepmd
 
-    :vasp_dir: str: TODO
-    :deepmd_dir: str: TODO
-    :deepmd_data: Dict: TODO
-    :returns: TODO
+    :vasp_dir: str: 
+    :deepmd_dir: str: 
+    :deepmd_data: Dict: 
+    :returns: 
 
     """
     vasp_set_list = [
@@ -619,7 +591,7 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
 
     # print(test_configs_path_absolute)
     # print(os.path.exists(test_configs_path_absolute))
-    # TODO
+    # 
     # HACK multiprocess never done
     # process = Pool(8)
 
@@ -664,8 +636,8 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
 def deepmd_clear_raw_test_configs(deepmd_dir: str):
     """Remove extra test_configs and raw file
 
-    :deepmd_dir: str: TODO
-    :returns: TODO
+    :deepmd_dir: str: 
+    :returns: 
 
     """
     with cd(deepmd_dir):
@@ -680,9 +652,9 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
                       iter_index: int):
     """Generate json file for deepmd training
 
-    :deepmd_graph_dir: str: TODO
-    :deepmd_data: Dict: TODO
-    :returns: TODO
+    :deepmd_graph_dir: str: 
+    :deepmd_data: Dict: 
+    :returns: 
 
     """
     # Specify more parameter option from json file
@@ -726,10 +698,10 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
 
 
 def deepmd_mv_ckpt(iter_index: int, graph_index: int):
-    """TODO: Docstring for deepmd_mv_ckpt.
+    """: Docstring for deepmd_mv_ckpt.
 
-    :iter_index: int: TODO
-    :returns: TODO
+    :iter_index: int: 
+    :returns: 
 
     """
     iter_dir = f'iter_{iter_index}'
@@ -749,9 +721,9 @@ def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
                need_continue: bool):
     """Train and freeze the graph in the deepmd_graph_dir
 
-    :deepmd_graph_dir: str: TODO
-    :deepmd_data: Dict: TODO
-    :returns: TODO
+    :deepmd_graph_dir: str: 
+    :deepmd_data: Dict: 
+    :returns: 
 
     """
     dp_train_path = os.path.join(deepmd_data['deepmd_bin_path'], 'dp_train')
@@ -783,16 +755,16 @@ def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
 def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
     """Do deepmd iteration
 
-    :iter_index: int: TODO
-    :deepmd_data: Dict: TODO
-    :returns: TODO
+    :iter_index: int: 
+    :deepmd_data: Dict: 
+    :returns: 
 
     """
     iter_dir = os.path.join('.', f'iter_{iter_index}')
     vasp_dir = os.path.join(iter_dir, 'vasp')
     deepmd_dir = os.path.join(iter_dir, 'deepmd')
 
-    # TODO
+    # 
     # DONE
     # Not need continue function
     # use multiprocess instead
@@ -829,12 +801,12 @@ def deepmd_single_process_initial_iter(graph_index: int, deepmd_graph_dir: str,
                                        need_continue: bool):
     """auxiliary function to do single process deepmd
 
-    :graph_index: int: TODO
-    :deepmd_graph_dir: str: TODO
-    :deepmd_data: Dict: TODO
-    :iter_index: int: TODO
-    :need_continue: bool: TODO
-    :returns: TODO
+    :graph_index: int: 
+    :deepmd_graph_dir: str: 
+    :deepmd_data: Dict: 
+    :iter_index: int: 
+    :need_continue: bool: 
+    :returns: 
 
     """
     # Generate json
@@ -842,18 +814,18 @@ def deepmd_single_process_initial_iter(graph_index: int, deepmd_graph_dir: str,
     # move previous model.ckpt if is not initial
     deepmd_mv_ckpt(iter_index, graph_index)
     # update deepmd check point
-    deepmd_update_checkpoint(iter_index, graph_index)
+    deepmd_update_checkpoint(iter_index)
     # Traning and freezing the model
     deepmd_run(iter_index, deepmd_graph_dir, deepmd_data, need_continue)
 
 
-def deepmd_single_process_continue_iter(
-        graph_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
-        iter_index: int, need_continue: bool):
+def deepmd_single_process_continue_iter(deepmd_graph_dir: str,
+                                        deepmd_data: Dict,
+                                        iter_index: int,
+                                        need_continue: bool):
     """deepmd_single_process function for continue mode
 
-    :param graph_index:
-    :type graph_index: int
+    :param need_continue:
     :param deepmd_graph_dir:
     :type deepmd_graph_dir: str
     :param deepmd_data:
@@ -865,9 +837,9 @@ def deepmd_single_process_continue_iter(
     deepmd_run(iter_index, deepmd_graph_dir, deepmd_data, need_continue)
 
 
-def deepmd_update_checkpoint(iter_index: int, graph_index: int):
-    """TODO: Docstring for deepmd_update_checkpoint.
-    :returns: TODO
+def deepmd_update_checkpoint(iter_index: int):
+    """: Docstring for deepmd_update_checkpoint.
+    :returns: 
 
     """
     ckpt: Dict = dict()
@@ -883,14 +855,16 @@ def deepmd_update_checkpoint(iter_index: int, graph_index: int):
         json.dump(ckpt, generate_ckpt, indent=2)
 
 
-def lmp_in_generate(iter_index: int, model_devi_job_index: int,
-                    iter_before_this_job: int, model_devi_jobs: List,
-                    lmp_config_dir: str, deepmd_data: Dict):
+def lmp_in_generate(lmp_config_index: int,
+                    model_devi_job_index: int,
+                    model_devi_jobs: List,
+                    lmp_config_dir: str,
+                    deepmd_data: Dict):
     """Generate in.deepmd file for lammps
 
-    :lmp_data: Dict: TODO
-    :lmp_config_dir: str: TODO
-    :returns: TODO
+    :lmp_data: Dict: 
+    :lmp_config_dir: str: 
+    :returns: 
 
     """
     # Get corresponding parameters from iter_index
@@ -911,16 +885,18 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
         temps_damp = model_devi_jobs[model_devi_job_index]['temps_damp']
 
     # Get the iter_index after minus the iteration before this job
-    new_iter_index = iter_index - iter_before_this_job
 
     if model_devi_jobs[model_devi_job_index]['ensemble'] == 'npt':
+        # Get pressure parameters
         press_lo = model_devi_jobs[model_devi_job_index]['press_lo']
         press_hi = model_devi_jobs[model_devi_job_index]['press_hi']
         press_divides = model_devi_jobs[model_devi_job_index]['press_divides']
-        temps_group = new_iter_index // temps_divides
-        press_group = new_iter_index % temps_divides
+
+        # config_index in a job
+        temps_group = lmp_config_index / temps_divides
+        press_group = lmp_config_index % temps_divides
         temps = temps_lo + (temps_hi - temps_lo) * temps_group / (
-            temps_divides - 1)
+                temps_divides - 1)
         press = (press_lo + (press_hi - press_lo) * press_group /
                  (press_divides - 1)) * 10000  # result is bar
 
@@ -930,9 +906,9 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
         # Set fix command
         fix_str = f'fix 1 all npt temp $t $t ${{td}} tri $p $p ${{pd}}'
     elif model_devi_jobs[model_devi_job_index]['ensemble'] == 'nvt':
-        temps_group = new_iter_index % temps_divides
+        temps_group = lmp_config_index % temps_divides
         temps = temps_lo + (temps_hi - temps_lo) * temps_group / (
-            temps_divides - 1)
+                temps_divides - 1)
         # Set fix command
         fix_str = f'fix 1 all nvt temp $t $t ${{td}}'
     else:
@@ -1002,9 +978,9 @@ def lmp_in_generate(iter_index: int, model_devi_job_index: int,
 def lmp_pos_generate(poscar_path: str, lmp_config_dir: str) -> None:
     """Generate lammps pos file from POSCAR
 
-    :poscar_path: str: TODO
-    :lmp_config_dir: str: TODO
-    :returns: TODO
+    :poscar_path: str: 
+    :lmp_config_dir: str: 
+    :returns: 
 
     """
     lmp_pos_path = os.path.join(lmp_config_dir, 'data.pos')
@@ -1015,9 +991,9 @@ def lmp_pos_generate(poscar_path: str, lmp_config_dir: str) -> None:
 def lmp_run(lmp_config_dir: str, lmp_data: Dict) -> None:
     """Run lammps with command
 
-    :lmp_config_dir: str: TODO
-    :lmp_data: Dict: TODO
-    :returns: TODO
+    :lmp_config_dir: str: 
+    :lmp_data: Dict: 
+    :returns: 
 
     """
     with cd(lmp_config_dir):
@@ -1027,53 +1003,95 @@ def lmp_run(lmp_config_dir: str, lmp_data: Dict) -> None:
         ])
 
 
-def lmp_iter(iter_index: int, model_devi_job_index: int,
-             iter_before_this_job: int, lmp_data: Dict, deepmd_data: Dict):
+def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: bool):
     """Generate specific configurations in an iteration
 
-    :iter_index: int: TODO
-    :model_devi_job_index: int: TODO
-    :iter_before_this_job: int: TODO
-    :deepmd_data: Dict: TODO
-    :returns: TODO
+    :param deepmd_data:
+    :param lmp_data:
+    :param iter_index:
+    :param need_continue:
+    :returns:
 
     """
     # Randomly choose one figuration from the same iteration vasp dir
-    iter_dir = f'iter_{iter_index}'
+    iter_dir: str = f'iter_{iter_index}'
     vasp_dir = os.path.join(iter_dir, 'vasp')
     lmp_dir = os.path.join(iter_dir, 'lammps')
     # lmp_config_dir is just a alias
-    lmp_config_dir = lmp_dir
     poscar_list = perp.get_poscar_files(vasp_dir, True)
 
-    # generate a random number
-    random_config_index = random.randint(0, len(poscar_list))
-    # generate with random pos file
-    lmp_pos_generate(poscar_list[random_config_index], lmp_config_dir)
-    # generate in.deepmd config file
-    lmp_in_generate(iter_index, model_devi_job_index, iter_before_this_job,
-                    lmp_data['model_devi_jobs'], lmp_config_dir, deepmd_data)
-    # update lammps check point
-    lmp_update_checkpoint(iter_index)
-    # Run lammps command
-    lmp_run(lmp_config_dir, lmp_data)
-    # choose bad configurations
-    lmp_parse_dump2poscar(iter_index, model_devi_job_index, lmp_config_dir,
-                          lmp_data)
+    model_devi_jobs_list = lmp_data['model_devi_jobs']
+
+    # lammps continue module
+    job_index = 0
+    lmp_config_index = 0
+    if os.path.exists('generator_checkpoint.json'):
+        with open('generator_checkpoint.json') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            if need_continue:
+                lmp_config_index = ckpt['config_index']
+                job_index = ckpt['job_index']
+
+    while job_index < len(model_devi_jobs_list):
+        model_devi_job = model_devi_jobs_list[job_index]
+        # Create job dir
+        lmp_job_path = os.path.join(lmp_dir, f'job_{job_index}')
+        if not os.path.exists(lmp_job_path):
+            os.makedirs(lmp_job_path)
+
+        lmp_config_number_in_job = model_devi_job['temps_divides']
+        if model_devi_job['ensemble'] == 'npt':
+            # Get pressure parameters
+            press_divides = model_devi_job['press_divides']
+            lmp_config_number_in_job *= press_divides
+
+        # generate a random number list in every job
+        random_config_randomlist = random.sample(range(len(poscar_list)),
+                                                 lmp_config_number_in_job)
+        random_choosed_config_list = [poscar_list[random_config_index]
+                                      for random_config_index in random_config_randomlist]
+        # Now create config dir in each job dir
+        # generate with random poscar file list
+        # DONE
+        while lmp_config_index < lmp_config_number_in_job:
+            lmp_config_dir = os.path.join(lmp_job_path, f'config_{lmp_config_index}')
+            if not os.path.exists(lmp_config_dir):
+                os.makedirs(lmp_config_dir)
+
+            lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir)
+            # generate in.deepmd config file
+            lmp_in_generate(lmp_config_index, job_index,
+                            lmp_data['model_devi_jobs'], lmp_config_dir, deepmd_data)
+            # update lammps check point
+            lmp_update_checkpoint(iter_index, lmp_config_index, job_index)
+            # Run lammps command
+            lmp_run(lmp_config_dir, lmp_data)
+            # choose bad configurations
+            lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+
+            # Update config index
+            lmp_config_index += 1
+
+        # Update job index
+        job_index += 1
 
 
-def lmp_get_bad_config_mask(iter_index: int, model_devi_job_index: int,
-                            lmp_config_dir: str, lmp_data: Dict) -> List:
+def lmp_get_bad_config_mask(model_devi_job_index: int,
+                            lmp_config_dir: str,
+                            lmp_data: Dict,
+                            lmp_config_numbers: int) -> List:
     """Get the bad config list from model_deviation
 
-    :lmp_config_dir: str: TODO
-    :lmp_data: Dict: TODO
+    :param lmp_data:
+    :param lmp_config_dir:
+    :param model_devi_job_index:
+    :param lmp_config_numbers:
     :returns:   len(bad_configs) = config_numbers
                 bad_configs is a ***BOOL*** mask determine which to choose
     """
     bad_configs_mask: List = []
     bad_configs_list: List = []
-    trust_configs = 0
+    bad_configs_numbers = 0
     # parse model_devi.out file
     model_devi_out_path = os.path.join(lmp_config_dir, 'model_devi.out')
     model_devi_f_trust_lo = lmp_data['model_devi_f_trust_lo']
@@ -1089,31 +1107,38 @@ def lmp_get_bad_config_mask(iter_index: int, model_devi_job_index: int,
                         float(line_field[5]) <= model_devi_f_trust_hi:
                     bad_configs_mask.append(True)
                     bad_configs_list.append(line_field[5])
-                    trust_configs += 1
+                    bad_configs_numbers += 1
                 else:
                     bad_configs_mask.append(False)
 
-    max_nchoose = lmp_data["model_devi_jobs"][model_devi_job_index]["nchoose"]
-    if trust_configs > max_nchoose:
-
-        # choose the max nchoose configurations
+    max_choose = lmp_data["model_devi_jobs"][model_devi_job_index]["nchoose"]
+    need_choose = max_choose // lmp_config_numbers
+    if bad_configs_numbers > need_choose:
+        # choose the max choosing configurations
         bad_configs_array = np.array(bad_configs_list)
-        max_choose_configs_index = np.argsort(bad_configs_array)[-max_nchoose:]
-        # Choose configs less than the max nchoose
+        max_choose_configs_index = np.argsort(bad_configs_array)[-max_choose:]
+        # Choose configs less than the max choosing numbers
         choosed_bad_configs_mask = np.array(bad_configs_mask)[
             max_choose_configs_index]
         bad_configs_mask = choosed_bad_configs_mask.tolist()
 
+        # The else is not so frequently
+        # Not so frequently
+
     return bad_configs_mask
 
 
-def lmp_parse_dump2poscar(iter_index: int, model_devi_job_index,
-                          lmp_config_dir: str, lmp_data: Dict):
+def lmp_parse_dump2poscar(lmp_config_numbers: int,
+                          lmp_config_dir: str,
+                          lmp_data: Dict,
+                          model_devi_job_index: int):
     """Change the dump file to the xyz file
 
-    :dump_file_path: str: TODO
-    :lmp_data: Dict: TODO
-    :returns: TODO
+    :param model_devi_job_index:
+    :param lmp_config_numbers:
+    :param lmp_data To get lammps parameters
+    :param lmp_config_dir:
+    :returns:
 
     """
     dump_file_path = os.path.join(lmp_config_dir, 'dump.trajectory')
@@ -1132,11 +1157,12 @@ def lmp_parse_dump2poscar(iter_index: int, model_devi_job_index,
 
     # Read xyz file
 
+    # Read all frames of the lammps dump file
     configs_list: List = io.read(dump_xyz_path, index=':', format='xyz')
 
     # Get bad configs
-    lmp_bad_configs_mask: List = lmp_get_bad_config_mask(
-        iter_index, model_devi_job_index, lmp_config_dir, lmp_data)
+    lmp_bad_configs_mask: List = lmp_get_bad_config_mask(model_devi_job_index, lmp_config_dir, lmp_data,
+                                                         lmp_config_numbers)
     # make poscar dir
     generated_poscar_dir = os.path.join(lmp_config_dir, 'generated_poscar')
     if not os.path.exists(generated_poscar_dir):
@@ -1152,15 +1178,19 @@ def lmp_parse_dump2poscar(iter_index: int, model_devi_job_index,
             io.write(poscar_path, bad_config, format='vasp')
 
 
-def lmp_update_checkpoint(iter_index: int):
-    """TODO: Docstring for deepmd_update_checkpoint.
-    :returns: TODO
+def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int):
+    """  Update checkpoint of the lammps part
+    :param lmp_config_index:
+    :param iter_index:
+    :param job_index:
+    :returns: 
 
     """
     with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'lammps'
-        ckpt['config_index'] = -1
+        ckpt['config_index'] = lmp_config_index
+        ckpt['job_index'] = job_index
         ckpt['iter_index'] = iter_index
 
     # Update the json
