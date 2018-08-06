@@ -75,8 +75,7 @@
 	},
 	"lmp": {
 		"command":	"/home/tgzhou/Tools/lammps-11Aug17/bin/lmp_mpi",
-		"np": 28,
-		"mass_map": [1.00794],
+		"np": 1,
 		"element_map": ["H"],
 		"model_devi_trust": 0.050,
 		"model_devi_f_trust_lo":	0.050,
@@ -93,7 +92,7 @@
 			"press_hi": 300,
 			"press_divides": 7,
 			"press_damp": 1,
-			"nsteps":	1000,
+				"nsteps": 500,
 			"nchoose":	200,
 			"trj_freq":	10,
 			"ensemble":	"npt"

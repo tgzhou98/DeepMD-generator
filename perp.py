@@ -10,7 +10,6 @@
 
 import argparse
 import os
-import random
 import sys
 from typing import List
 
@@ -203,7 +202,7 @@ def perp() -> None:
                 os.makedirs(config_path)
 
             poscar_path = os.path.join(config_path, 'POSCAR')
-            io.write(poscar_path, configuration, 'vasp')
+            io.write(poscar_path, configuration, 'vasp', direct=True)
 
 
 if __name__ == "__main__":
