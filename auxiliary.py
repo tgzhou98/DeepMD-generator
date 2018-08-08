@@ -80,3 +80,7 @@ def get_poscar_files(directory: str, recursive: bool) -> List:
         # sys.stderr.write('  {}\n'.format(('\n  ').join(poscars)))
         return poscars
     return poscars
+
+
+def list_concat(list1: List, list2: List):
+    return [(a_ + b_) for a_, b_ in zip(list1, list2)]

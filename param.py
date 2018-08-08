@@ -129,8 +129,8 @@ def generator():
             lmp_iter(iter_index, lmp_data, deepmd_data,
                      (initial_status == 'lammps'))
 
-            # Finally continue the loop
-            iter_index += 1
+        # Finally continue the loop
+        iter_index += 1
 
     # enter full loop
     while iter_index < iter_number:

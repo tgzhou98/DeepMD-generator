@@ -138,7 +138,6 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
     """
     iter_dir = f'iter_{iter_index}'
     vasp_dir = os.path.join(iter_dir, 'vasp')
-    vasp_previous_dir = ''
 
     # iter_index is 0 (initial condition)
     if iter_index == 0:
@@ -152,12 +151,22 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
 
     # Get poscar
     # Divide poscar to several sets
-    # Determinal how many set are generated
-    # Bug fixed poscar_set is a file name instead of path
-    poscar_set_list = [
-        auxiliary.get_poscar_files(os.path.join(vasp_previous_dir, poscar_set), True)
-        for poscar_set in os.listdir(vasp_previous_dir)
-    ]
+    # Determine  how many set are generated
+
+    # Bug fixed
+    # Now vasp can detect previous lammps dir and concat sets from different jobs
+    job_list: List[str] = [os.path.join(vasp_previous_dir, lmp_job_dir) for lmp_job_dir
+                           in os.listdir(vasp_previous_dir)
+                           if lmp_job_dir.startswith('job')]
+    # Assume that each job has the same set numbers
+    poscar_set_list: List[List[str]] = [[] for _ in range(len(job_list[0]))]
+    for lmp_job_dir in job_list:
+        lmp_set_list_in_job: List[List[str]] = [
+            auxiliary.get_poscar_files(os.path.join(lmp_job_dir, set_dir_name), True)
+            for set_dir_name in os.listdir(lmp_job_dir) if set_dir_name.startswith('set')
+        ]
+        poscar_set_list = auxiliary.list_concat(poscar_set_list, lmp_set_list_in_job)
+
     # for poscar_set in os.listdir(vasp_previous_dir):
     #     print(poscar_set)
     # print("poscar_set_list")
@@ -180,7 +189,7 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
     while vasp_set_index < len(poscar_set_list):
         while vasp_config_index < len(poscar_set_list[vasp_set_index]):
             # BugFixed:
-            # Need updata poscar in the previous dir
+            # Need update poscar in the previous dir
             poscar_file = poscar_set_list[vasp_set_index][vasp_config_index]
             vasp_set_dir = os.path.join(vasp_dir, f'set_{vasp_set_index}')
             if not os.path.exists(vasp_set_dir):
@@ -270,8 +279,9 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
     # Not read file at the first step
     if not (iter_index == 0 and vasp_set_index == 0
             and vasp_config_index == 0):
-        with open(outcar_check_path) as outcar_check_file:
-            outcar_check_dict = load(outcar_check_file)
+        if os.path.exists(outcar_check_path):
+            with open(outcar_check_path) as outcar_check_file:
+                outcar_check_dict = load(outcar_check_file)
 
     set_dict: Dict = dict()
     drift_dict: Dict = dict()

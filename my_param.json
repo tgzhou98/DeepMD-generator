@@ -25,7 +25,7 @@
 		"_comment":	"These batch will change batch size in the training_params",
 		"sys_batch_size":	2,
 		"init_batch_size":	8,
-		"set_number": 4,
+		"set_number": 3,
 		"training_params": {
 			"_comment": " model parameters",
 			"use_smooth":	true,
@@ -93,7 +93,7 @@
 			"press_divides": 7,
 			"press_damp": 1,
 				"nsteps": 500,
-			"nchoose":	200,
+				"nchoose": 500,
 			"trj_freq":	10,
 			"ensemble":	"npt"
 			}

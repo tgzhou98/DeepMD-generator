@@ -20,17 +20,16 @@ import numpy as np
 from ase import io, data
 
 import auxiliary
-import perp
 
 
-def lmp_in_generate(lmp_config_index: int, model_devi_job_index: int, model_devi_jobs: List, lmp_config_dir: str,
-                    deepmd_data: Dict):
+def lmp_in_generate(model_devi_job_index: int, lmp_config_dir: str, deepmd_data: Dict, model_devi_jobs: List,
+                    lmp_shuffled_index):
     """Generate in.deepmd file for lammps
 
+    :param lmp_shuffled_index:
     :param deepmd_data:
     :param lmp_config_dir:
     :param model_devi_jobs:
-    :param lmp_config_index: int
     :param model_devi_job_index:
     :returns:
 
@@ -62,8 +61,8 @@ def lmp_in_generate(lmp_config_index: int, model_devi_job_index: int, model_devi
         press_divides = model_devi_jobs[model_devi_job_index]['press_divides']
 
         # config_index in a job
-        temps_group = lmp_config_index / temps_divides
-        press_group = lmp_config_index % temps_divides
+        temps_group = lmp_shuffled_index / temps_divides
+        press_group = lmp_shuffled_index % temps_divides
         temps = temps_lo + (temps_hi - temps_lo) * temps_group / (
                 temps_divides - 1)
         press = (press_lo + (press_hi - press_lo) * press_group /
@@ -75,7 +74,7 @@ def lmp_in_generate(lmp_config_index: int, model_devi_job_index: int, model_devi
         # Set fix command
         fix_str = f'fix 1 all npt temp $t $t ${{td}} tri $p $p ${{pd}}'
     elif model_devi_jobs[model_devi_job_index]['ensemble'] == 'nvt':
-        temps_group = lmp_config_index % temps_divides
+        temps_group = lmp_shuffled_index % temps_divides
         temps = temps_lo + (temps_hi - temps_lo) * temps_group / (
                 temps_divides - 1)
         # Set fix command
@@ -86,7 +85,7 @@ def lmp_in_generate(lmp_config_index: int, model_devi_job_index: int, model_devi
 
     # Generate pair_style command
     graph_path_list = [
-        os.path.join('..', '..', '..', 'deepmd', f'graph_{graph_numb}',
+        os.path.join('..', '..', '..', '..', 'deepmd', f'graph_{graph_numb}',
                      'frozen_model.pb')
         for graph_numb in range(deepmd_data['numb_models'])
     ]
@@ -202,23 +201,33 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
     vasp_dir = os.path.join(iter_dir, 'vasp')
     lmp_dir = os.path.join(iter_dir, 'lammps')
     # lmp_config_dir is just a alias
-    poscar_list = perp.get_poscar_files(vasp_dir, True)
+    poscar_set_list: List[List[str]] = [auxiliary.get_poscar_files(os.path.join(vasp_dir, set_dir), True)
+                                        for set_dir in os.listdir(vasp_dir)
+                                        if set_dir.startswith('set')]
 
     model_devi_jobs_list = lmp_data['model_devi_jobs']
 
     # lammps continue module
     job_index = 0
+    set_index = 0
     lmp_config_index = 0
+    config_shuffle_random_list_in_job: List = list()
+
     if os.path.exists('generator_checkpoint.json'):
         with open('generator_checkpoint.json') as generate_ckpt:
             ckpt = load(generate_ckpt)
             if need_continue:
-                if ckpt['config_index'] != -1:
+                if 'config_index' in ckpt:
                     lmp_config_index = ckpt['config_index']
                 if 'job_index' in ckpt:
                     job_index = ckpt['job_index']
+                if 'set_index' in ckpt:
+                    set_index = ckpt['set_index']
+                if 'random_shuffle_list' in ckpt:
+                    config_shuffle_random_list_in_job = ckpt['random_shuffle_list']
 
     while job_index < len(model_devi_jobs_list):
+        # predefine some job information
         model_devi_job = model_devi_jobs_list[job_index]
         # Create job dir
         lmp_job_path = os.path.join(lmp_dir, f'job_{job_index}')
@@ -231,34 +240,76 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
             press_divides = model_devi_job['press_divides']
             lmp_config_number_in_job *= press_divides
 
-        # generate a random number list in every job
-        random_config_randomlist = random.sample(range(len(poscar_list)),
-                                                 lmp_config_number_in_job)
-        random_choosed_config_list = [poscar_list[random_config_index]
-                                      for random_config_index in random_config_randomlist]
-        # Now create config dir in each job dir
-        # generate with random poscar file list
-        # DONE
-        while lmp_config_index < lmp_config_number_in_job:
-            lmp_config_dir = os.path.join(lmp_job_path, f'config_{lmp_config_index}')
-            if not os.path.exists(lmp_config_dir):
-                os.makedirs(lmp_config_dir)
+        # lmp_set_dir_list and lmp_config_number_in_job is the factor of lmp_config_number_in_set
+        lmp_config_number_in_set = lmp_config_number_in_job // len(poscar_set_list)
+        lmp_config_number_in_job = (lmp_config_number_in_job // len(poscar_set_list)) * len(poscar_set_list)
 
-            lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir, lmp_data)
-            # generate in.deepmd config file
-            lmp_in_generate(lmp_config_index, job_index, lmp_data['model_devi_jobs'], lmp_config_dir, deepmd_data)
-            # update lammps check point
-            lmp_update_checkpoint(iter_index, lmp_config_index, job_index)
-            # Run lammps command
-            lmp_run(lmp_config_dir, lmp_data)
-            # choose bad configurations
-            lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+        # Be careful!!
+        # This random list is to provide a random list for shuffle of temps and press
+        if not need_continue:
+            config_shuffle_random_list_in_job = random.sample(range(lmp_config_number_in_job),
+                                                              lmp_config_number_in_job)
+        else:
+            if set_index == 0 and lmp_config_index == 0:
+                config_shuffle_random_list_in_job = random.sample(range(lmp_config_number_in_job),
+                                                                  lmp_config_number_in_job)
 
-            # Update config index
-            lmp_config_index += 1
+        while set_index < len(poscar_set_list):
+            # generate a random number list in every set
+            poscar_list = poscar_set_list[set_index]
 
+            # BUG FIXED
+            # Be careful!!
+            # This random list is to choose some configuration from previous vasp directories randomly
+            random_config_random_list = random.sample(range(len(poscar_list)),
+                                                      lmp_config_number_in_set)
+            random_choosed_config_list: List[str] = [poscar_list[random_config_index]
+                                                     for random_config_index in random_config_random_list]
+            # Now create config dir in each set dir
+            # generate with random poscar file list
+            # DONE
+
+            while lmp_config_index < lmp_config_number_in_set:
+                # Different initial atom type and numbers have different set_index
+                # configs in one set
+                lmp_config_dir = os.path.join(lmp_job_path, f'set_{set_index}', f'config_{lmp_config_index}')
+                if not os.path.exists(lmp_config_dir):
+                    os.makedirs(lmp_config_dir)
+
+                # determine  random shuffle index
+                # BUG
+                # Can't correctly continue from the checkpoint
+                # Fixed
+                # Not save random shuffle list checkpoint file
+                lmp_shuffled_index = config_shuffle_random_list_in_job[
+                    lmp_config_index + set_index * lmp_config_number_in_set]
+
+                lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir, lmp_data)
+                # generate in.deepmd config file
+                lmp_in_generate(job_index, lmp_config_dir, deepmd_data, lmp_data['model_devi_jobs'], lmp_shuffled_index)
+                # update lammps check point
+                lmp_update_checkpoint(iter_index, lmp_config_index, job_index, set_index,
+                                      config_shuffle_random_list_in_job)
+                # Run lammps command
+                lmp_run(lmp_config_dir, lmp_data)
+                # choose bad configurations
+                lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+
+                # Update config index
+                lmp_config_index += 1
+
+            # BUG FIXED
+            # have to set lmp_config_index to 0 again
+            lmp_config_index = 0
+            set_index += 1
+
+        # have to set set_index to 0 again
+        set_index = 0
         # Update job index
         job_index += 1
+
+    # Finally set job_index to 0
+    # NO use
 
 
 def lmp_get_bad_config_mask(model_devi_job_index: int,
@@ -274,9 +325,11 @@ def lmp_get_bad_config_mask(model_devi_job_index: int,
     :returns:   len(bad_configs) = config_numbers
                 bad_configs is a ***BOOL*** mask determine which to choose
     """
-    bad_configs_mask: List = []
-    bad_configs_list: List = []
+    # The length of the bad_config_mask > bad_configs_devi_list and bad_configs_index
+    bad_configs_devi_list: List = []
+    bad_configs_index_list: List = []
     bad_configs_numbers = 0
+    lmp_step_numbers = 0
     # parse model_devi.out file
     model_devi_out_path = os.path.join(lmp_config_dir, 'model_devi.out')
     model_devi_f_trust_lo = lmp_data['model_devi_f_trust_lo']
@@ -285,27 +338,34 @@ def lmp_get_bad_config_mask(model_devi_job_index: int,
     with open(model_devi_out_path, 'r') as model_devi_out_file:
         for line_number, line in enumerate(model_devi_out_file):
             if line_number != 0:
+                # Lammps run how many steps
+                lmp_step_numbers += 1
+
                 line_field: List = line.split()
-                if float(line_field[5]) < model_devi_f_trust_lo:
-                    bad_configs_mask.append(False)
-                elif float(line_field[5]) >= model_devi_f_trust_lo and \
-                        float(line_field[5]) <= model_devi_f_trust_hi:
-                    bad_configs_mask.append(True)
-                    bad_configs_list.append(line_field[5])
+                if model_devi_f_trust_lo <= float(line_field[4]) <= model_devi_f_trust_hi:
+                    # bad_configs_mask.append(True)
+                    bad_configs_devi_list.append(line_field[4])
+                    bad_configs_index_list.append(line_number - 1)
                     bad_configs_numbers += 1
-                else:
-                    bad_configs_mask.append(False)
 
     max_choose = lmp_data["model_devi_jobs"][model_devi_job_index]["nchoose"]
     need_choose = max_choose // lmp_config_numbers
+    bad_configs_mask = [False] * lmp_step_numbers
+
     if bad_configs_numbers > need_choose:
         # choose the max choosing configurations
-        bad_configs_array = np.array(bad_configs_list)
-        max_choose_configs_index = np.argsort(bad_configs_array)[-max_choose:]
+        bad_configs_array = np.array(bad_configs_devi_list)
+        # Bug fixed, slicing index is need choose
+        max_choose_configs_index = np.argsort(bad_configs_array)[-need_choose:]
         # Choose configs less than the max choosing numbers
-        choosed_bad_configs_mask = np.array(bad_configs_mask)[
-            max_choose_configs_index]
-        bad_configs_mask = choosed_bad_configs_mask.tolist()
+        for bad_choosed_index in max_choose_configs_index.tolist():
+            # Secondary choose
+            bad_configs_index = bad_configs_index_list[bad_choosed_index]
+            bad_configs_mask[bad_configs_index] = True
+    else:
+        # Choose configs more than the max choosing numbers
+        for bad_configs_index in bad_configs_index_list:
+            bad_configs_mask[bad_configs_index] = True
 
         # The else is not so frequently
         # Not so frequently
@@ -353,8 +413,11 @@ def lmp_parse_dump2poscar(lmp_config_numbers: int,
             io.write(poscar_path, bad_config, format='vasp', direct=True)
 
 
-def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int):
+def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int, set_index: int,
+                          config_shuffle_random_list_in_job: List):
     """  Update checkpoint of the lammps part
+    :param config_shuffle_random_list_in_job:
+    :param set_index:
     :param lmp_config_index:
     :param iter_index:
     :param job_index:
@@ -366,7 +429,9 @@ def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int
         ckpt['status'] = 'lammps'
         ckpt['config_index'] = lmp_config_index
         ckpt['job_index'] = job_index
+        ckpt['set_index'] = set_index
         ckpt['iter_index'] = iter_index
+        ckpt['random_shuffle_list'] = config_shuffle_random_list_in_job
 
     # Update the json
     with open('generator_checkpoint.json', 'w') as generate_ckpt:

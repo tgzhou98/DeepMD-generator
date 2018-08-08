@@ -64,12 +64,14 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             test_configs_absolute = os.path.abspath('test.configs')
             convert2raw.param_interface(test_configs_absolute)
             print('generate_raw')
-            if not deepmd_data['set_number']:
-                set_number = 8
+            if 'set_number' not in deepmd_data:
+                set_number = 4
             else:
                 set_number = deepmd_data['set_number']
             # Generate set
-            set_size: int = 50 * (total_configs // set_number // 50)
+            # TODO
+            # DIVIDE 10 is a magic number, but I don't know how to choose
+            set_size: int = 10 * (total_configs // set_number // 10)
             print(f'set size is {set_size}')
             # # Remove set
             # print("remove set")
@@ -116,6 +118,9 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
     """
     # Specify more parameter option from json file
 
+    # specify json file path
+    deepmd_json_path = os.path.join(deepmd_graph_dir, 'deepmd.json')
+
     # Generate a random number as a random seed
     deepmd_data['training_params']['seed'] = random.randint(0, 2147483647)
     # Change batch size
@@ -144,8 +149,6 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
         ]
     deepmd_data['training_params']['systems'] = sets_system_list
 
-    deepmd_json_path = os.path.join(deepmd_graph_dir, 'deepmd.json')
-
     # Create if not have graph dir
     if not os.path.exists(deepmd_graph_dir):
         os.makedirs(deepmd_graph_dir)
@@ -154,7 +157,7 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
         json.dump(deepmd_data['training_params'], deepmd_json, indent=2)
 
 
-def deepmd_mv_ckpt(iter_index: int, graph_index: int):
+def deepmd_cp_ckpt(iter_index: int, graph_index: int):
     """: Docstring for deepmd_mv_ckpt.
 
     :iter_index: int:
@@ -171,7 +174,7 @@ def deepmd_mv_ckpt(iter_index: int, graph_index: int):
                                       f'graph_{graph_index}')
         for model_ckpt in os.listdir(iter_previous_graph_dir):
             if model_ckpt.startswith('model.ckpt'):
-                shutil.move(model_ckpt, iter_graph_dir)
+                shutil.copy2(os.path.join(iter_previous_graph_dir, model_ckpt), iter_graph_dir)
 
 
 def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
@@ -198,7 +201,7 @@ def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
                 subprocess.run([dp_train_path, deepmd_json_path])
             else:
                 subprocess.run([
-                    dp_train_path, deepmd_json_path, '--initial', 'model.ckpt'
+                    dp_train_path, deepmd_json_path, '--init-model', 'model.ckpt'
                 ])
         else:
             subprocess.run(
@@ -235,16 +238,23 @@ def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
         if not os.path.exists(deepmd_graph_dir):
             os.makedirs(deepmd_graph_dir)
         print("need_continue", need_continue)
-        if need_continue:
+        lcurve_path = os.path.join(deepmd_graph_dir, f'lcurve.out')
+
+        # This is the HACK
+        # TODO
+        # i don't provide two initial and continue commands to distinguish the initial and restart command
+        # Just delete the directory and redo
+        if need_continue and os.path.exists(lcurve_path):
             process.apply_async(
                 deepmd_single_process_continue_iter,
                 args=(graph_index, deepmd_graph_dir, deepmd_data, iter_index,
-                      need_continue))
+                      need_continue and os.path.exists(lcurve_path)))
         else:
             process.apply_async(
                 deepmd_single_process_initial_iter,
                 args=(graph_index, deepmd_graph_dir, deepmd_data, iter_index,
-                      need_continue))
+                      need_continue and os.path.exists(lcurve_path)))
+
     process.close()
     process.join()
     print('All subprocess done')
@@ -269,7 +279,7 @@ def deepmd_single_process_initial_iter(graph_index: int, deepmd_graph_dir: str,
     # Generate json
     deepmd_json_param(deepmd_graph_dir, deepmd_data, iter_index)
     # move previous model.ckpt if is not initial
-    deepmd_mv_ckpt(iter_index, graph_index)
+    deepmd_cp_ckpt(iter_index, graph_index)
     # update deepmd check point
     deepmd_update_checkpoint(iter_index)
     # Training and freezing the model
@@ -303,8 +313,8 @@ def deepmd_update_checkpoint(iter_index: int):
     with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'deepmd'
-        ckpt['config_index'] = -1  # multiprocessing don't need graph_index
-        ckpt['set_index'] = -1
+        ckpt['config_index'] = 0  # multiprocessing don't need graph_index
+        ckpt['set_index'] = 0
         ckpt['iter_index'] = iter_index
 
     # Dump to the same file and erase the former

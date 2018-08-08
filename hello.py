@@ -10,6 +10,7 @@
 
 
 import os
+
 from ase import io
 
 
@@ -26,7 +27,7 @@ def lmp_parse_dump2poscar(lmp_config_dir: str):
     with open(dump_file_path, 'r') as dump_file:
         with open(dump_xyz_path, 'w') as dump_xyz_file:
             for line in dump_file:
-                line_field = line.split()
+                line_field = line.strip().split()
                 if len(line_field) == 4:
                     element_type: str = "H"
                     line_field[0] = element_type
