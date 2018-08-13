@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" serverName="maxwell" uploadOnCheckin="0eb97ec1-f9c8-461d-a9af-3b9c04ec5119">
+  <component name="PublishConfigData" autoUpload="Always" serverName="maxwell" uploadOnCheckin="0eb97ec1-f9c8-461d-a9af-3b9c04ec5119">
     <serverData>
       <paths name="maxwell">
         <serverdata>
@@ -11,5 +11,6 @@
       </paths>
     </serverData>
     <option name="myUploadOnCheckinName" value="maxwell" />
+    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>
