@@ -7,9 +7,9 @@
 # created at  :  2018-07-20 03:34
 # purpose     :
 #########################################################################
+import json
 import os
 import shutil
-from json import load, dump
 from subprocess import run
 from time import time
 from typing import Dict, List
@@ -181,7 +181,7 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
     vasp_config_index = 0
     if os.path.exists('generator_checkpoint.json'):
         with open('generator_checkpoint.json') as generate_ckpt:
-            ckpt = load(generate_ckpt)
+            ckpt = json.load(generate_ckpt)
             if need_continue:
                 vasp_config_index = ckpt['config_index']
                 vasp_set_index = ckpt['set_index']
@@ -230,20 +230,27 @@ def vasp_iter(iter_index: int, vasp_data: Dict, need_continue: bool):
         vasp_config_index = 0
 
 
-def vasp_update_checkpoint(vasp_set_index, vasp_config_index: int,
+def vasp_update_checkpoint(vasp_set_index: int, vasp_config_index: int,
                            iter_index: int):
-    """: Docstring for vasp_update_checkpoint.
-    :returns:
+    """vasp update the checkpoint
+    :param iter_index:
+    :param vasp_set_index:
+    :param vasp_config_index:
 
     """
-    ckpt: Dict = dict()
-    # if iter_index == 0 and vasp_config_index == 0:
+    # Now update will preserve the previous steps information
+    if os.path.exists('generator_checkpoint.json'):
+        with open('generator_checkpoint.json', 'r') as generate_ckpt:
+            ckpt = json.load(generate_ckpt)
+            ckpt['status'] = 'vasp'
+            ckpt['config_index'] = vasp_config_index
+            ckpt['set_index'] = vasp_set_index
+            ckpt['iter_index'] = iter_index
+            ckpt['dump_to_poscar'] = False
+
+    # Update the json
     with open('generator_checkpoint.json', 'w') as generate_ckpt:
-        ckpt['status'] = 'vasp'
-        ckpt['config_index'] = vasp_config_index
-        ckpt['set_index'] = vasp_set_index
-        ckpt['iter_index'] = iter_index
-        dump(ckpt, generate_ckpt, indent=2)
+        json.dump(ckpt, generate_ckpt, indent=2)
     # else:
     #     with open('generator_checkpoint.json', 'r') as generate_ckpt:
     #         ckpt = json.load(generate_ckpt)
@@ -281,7 +288,7 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
             and vasp_config_index == 0):
         if os.path.exists(outcar_check_path):
             with open(outcar_check_path) as outcar_check_file:
-                outcar_check_dict = load(outcar_check_file)
+                outcar_check_dict = json.load(outcar_check_file)
 
     set_dict: Dict = dict()
     drift_dict: Dict = dict()
@@ -352,4 +359,4 @@ def vasp_outcar_check(vasp_set_index: int, vasp_config_index: int,
 
     # Update json file
     with open(outcar_check_path, 'w') as outcar_check_file:
-        dump(outcar_check_dict, outcar_check_file, indent=2)
+        json.dump(outcar_check_dict, outcar_check_file, indent=2)

@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 from multiprocessing import Pool
-from typing import Dict
+from typing import Dict, List
 
 import auxiliary
 import cessp2force_lin
@@ -64,17 +64,31 @@ def deepmd_raw_generate(vasp_dir: str, deepmd_dir: str, deepmd_data: Dict):
             test_configs_absolute = os.path.abspath('test.configs')
             convert2raw.param_interface(test_configs_absolute)
             print('generate_raw')
-            if 'set_number' not in deepmd_data:
-                set_number = 4
+            if 'max_set_number' not in deepmd_data:
+                max_set_number = 10
             else:
-                set_number = deepmd_data['set_number']
+                max_set_number = deepmd_data['set_number']
             # Generate set
             # TODO
             # DIVIDE 10 is a magic number, but I don't know how to choose
-            set_size: int = 10 * (total_configs // set_number // 10)
+
+            numb_test = deepmd_data['training_params']['numb_test']
+            set_size = -1
+            for train_set_number in range(1, max_set_number):
+                configs_in_set = (total_configs - numb_test) // train_set_number
+                if configs_in_set > numb_test:
+                    continue
+                else:
+                    set_size = (total_configs - numb_test) // (train_set_number - 1)
+
+            # Check whether set_size is updated
+            if set_size == -1:
+                print("making set is unsuccessful", file=sys.stderr)
+                tb = sys.exc_info()
+                raise Exception("foo occurred").with_traceback(tb)
+
             print(f'set size is {set_size}')
-            # # Remove set
-            # print("remove set")
+
             for set_dir in os.listdir('.'):
                 if set_dir.startswith('set') and os.path.isdir(set_dir):
                     shutil.rmtree(set_dir)
@@ -141,12 +155,17 @@ def deepmd_json_param(deepmd_graph_dir: str, deepmd_data: Dict,
     # set system path
     # Bug Fixed
     # Now use relative path
+    sets_system_list: List[str] = list()
+    # FIXED
+    # train from the sets in previous and current iter
     with auxiliary.cd(deepmd_graph_dir):
-        sets_system_relative_path = os.path.join('..', 'data')
-        sets_system_list = [
-            os.path.join(sets_system_relative_path, deepmd_set_dir)
-            for deepmd_set_dir in os.listdir(sets_system_relative_path)
-        ]
+        for exist_sets_iter_index in range(iter_index + 1):
+            deepmd_data_root_path = os.path.join('..', '..', '..', f'iter_{exist_sets_iter_index}', 'deepmd', 'data')
+            sets_system_list += [
+                os.path.join(deepmd_data_root_path, deepmd_set_dir)
+                for deepmd_set_dir in os.listdir(deepmd_data_root_path)
+                if deepmd_set_dir.startswith('deepmd_set')
+            ]
     deepmd_data['training_params']['systems'] = sets_system_list
 
     # Create if not have graph dir
@@ -197,19 +216,17 @@ def deepmd_run(iter_index: int, deepmd_graph_dir: str, deepmd_data: Dict,
         print("need_continue_run", need_continue, file=sys.stderr)
         # Check if restart
         if not need_continue:
-            if iter_index == 0:
-                subprocess.run([dp_train_path, deepmd_json_path])
-            else:
-                subprocess.run([
-                    dp_train_path, deepmd_json_path, '--init-model', 'model.ckpt'
-                ])
+            # Now don't need --init-model parameter in dp_train
+            subprocess.run([dp_train_path, deepmd_json_path])
+            print("new model", file=sys.stderr)
         else:
             subprocess.run(
                 [dp_train_path, deepmd_json_path, '--restart', 'model.ckpt'])
+            print("restart-model", file=sys.stderr)
         # Start freeze model
-        print(f'Now start freezing the graph in the {deepmd_graph_dir}\n')
+        print(f'Now start freezing the graph in the {deepmd_graph_dir}\n', file=sys.stderr)
         subprocess.run([dp_frz_path])
-        print(f'Freezing end\n')
+        print(f'Freezing end\n', file=sys.stderr)
 
 
 def deepmd_iter(iter_index: int, deepmd_data: Dict, need_continue: bool):
@@ -305,17 +322,18 @@ def deepmd_single_process_continue_iter(deepmd_graph_dir: str,
 
 
 def deepmd_update_checkpoint(iter_index: int):
-    """: Docstring for deepmd_update_checkpoint.
-    :returns:
+    """  Deepmd update the checkpoint
+    :type iter_index: int
 
     """
-    ckpt: Dict = dict()
+    # Now update will preserve the previous steps information
     with open('generator_checkpoint.json', 'r') as generate_ckpt:
         ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'deepmd'
         ckpt['config_index'] = 0  # multiprocessing don't need graph_index
         ckpt['set_index'] = 0
         ckpt['iter_index'] = iter_index
+        ckpt['dump_to_poscar'] = False
 
     # Dump to the same file and erase the former
     with open('generator_checkpoint.json', 'w') as generate_ckpt:

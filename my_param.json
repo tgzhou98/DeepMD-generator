@@ -25,7 +25,7 @@
 		"_comment":	"These batch will change batch size in the training_params",
 		"sys_batch_size":	2,
 		"init_batch_size":	8,
-		"set_number": 3,
+		"max_set_number": 10,
 		"training_params": {
 			"_comment": " model parameters",
 			"use_smooth":	true,
@@ -79,21 +79,21 @@
 		"element_map": ["H"],
 		"model_devi_trust": 0.050,
 		"model_devi_f_trust_lo":	0.050,
-		"model_devi_f_trust_hi":	0.550,
+		"model_devi_f_trust_hi": 0.280,
 		"model_devi_e_trust_lo":	0.050,
-		"model_devi_e_trust_hi":	0.550,
+		"model_devi_e_trust_hi": 0.280,
 		"model_devi_jobs": [
 			{
 			"temps_lo": 2000,
 			"temps_hi": 2500,
-			"temps_divides": 7,
+				"temps_divides": 16,
 			"temps_damp": 0.1,
 			"press_lo": 100,
 			"press_hi": 300,
-			"press_divides": 7,
+				"press_divides": 16,
 			"press_damp": 1,
-				"nsteps": 500,
-				"nchoose": 500,
+				"nsteps": 1000,
+				"nchoose": 1000,
 			"trj_freq":	10,
 			"ensemble":	"npt"
 			}

@@ -8,12 +8,12 @@
 # purpose     :
 #########################################################################
 
+import json
 import os
 import random
 import subprocess
 import sys
 from itertools import compress
-from json import load, dump
 from typing import Dict, List
 
 import numpy as np
@@ -211,11 +211,12 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
     job_index = 0
     set_index = 0
     lmp_config_index = 0
+    dump_to_poscar = False
     config_shuffle_random_list_in_job: List = list()
 
     if os.path.exists('generator_checkpoint.json'):
         with open('generator_checkpoint.json') as generate_ckpt:
-            ckpt = load(generate_ckpt)
+            ckpt = json.load(generate_ckpt)
             if need_continue:
                 if 'config_index' in ckpt:
                     lmp_config_index = ckpt['config_index']
@@ -225,6 +226,8 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
                     set_index = ckpt['set_index']
                 if 'random_shuffle_list' in ckpt:
                     config_shuffle_random_list_in_job = ckpt['random_shuffle_list']
+                if 'dump_to_poscar' in ckpt:
+                    dump_to_poscar = ckpt['dump_to_poscar']
 
     while job_index < len(model_devi_jobs_list):
         # predefine some job information
@@ -284,16 +287,24 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
                 lmp_shuffled_index = config_shuffle_random_list_in_job[
                     lmp_config_index + set_index * lmp_config_number_in_set]
 
-                lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir, lmp_data)
-                # generate in.deepmd config file
-                lmp_in_generate(job_index, lmp_config_dir, deepmd_data, lmp_data['model_devi_jobs'], lmp_shuffled_index)
-                # update lammps check point
-                lmp_update_checkpoint(iter_index, lmp_config_index, job_index, set_index,
-                                      config_shuffle_random_list_in_job)
-                # Run lammps command
-                lmp_run(lmp_config_dir, lmp_data)
-                # choose bad configurations
-                lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+                # lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir, lmp_data)
+                # # generate in.deepmd config file
+                # lmp_in_generate(job_index, lmp_config_dir, deepmd_data, lmp_data['model_devi_jobs'], lmp_shuffled_index)
+                # # update lammps check point
+                # lmp_update_checkpoint(iter_index, lmp_config_index, job_index, set_index,
+                #                       config_shuffle_random_list_in_job)
+                # # Run lammps command
+                # lmp_run(lmp_config_dir, lmp_data)
+                # # choose bad configurations
+                # lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+                if not dump_to_poscar:
+                    lmp_iter_full_step(random_choosed_config_list, lmp_config_index, lmp_config_dir, lmp_data,
+                                       job_index, deepmd_data,
+                                       lmp_shuffled_index, iter_index, set_index,
+                                       config_shuffle_random_list_in_job,
+                                       lmp_config_number_in_job)
+                else:
+                    lmp_iter_dump_step(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
 
                 # Update config index
                 lmp_config_index += 1
@@ -310,6 +321,42 @@ def lmp_iter(iter_index: int, lmp_data: Dict, deepmd_data: Dict, need_continue: 
 
     # Finally set job_index to 0
     # NO use
+
+
+def lmp_iter_full_step(random_choosed_config_list: List, lmp_config_index: int, lmp_config_dir: str, lmp_data: Dict,
+                       job_index: int, deepmd_data: Dict,
+                       lmp_shuffled_index: int, iter_index: int, set_index: int,
+                       config_shuffle_random_list_in_job: List,
+                       lmp_config_number_in_job: int):
+    """
+
+    :param lmp_config_number_in_job:
+    :param config_shuffle_random_list_in_job:
+    :param set_index:
+    :param iter_index:
+    :param lmp_shuffled_index:
+    :param deepmd_data:
+    :param job_index:
+    :param lmp_data:
+    :param lmp_config_dir:
+    :param lmp_config_index:
+    :param random_choosed_config_list:
+    """
+    lmp_pos_generate(random_choosed_config_list[lmp_config_index], lmp_config_dir, lmp_data)
+    # generate in.deepmd config file
+    lmp_in_generate(job_index, lmp_config_dir, deepmd_data, lmp_data['model_devi_jobs'], lmp_shuffled_index)
+    # update lammps check point
+    lmp_update_checkpoint(iter_index, lmp_config_index, job_index, set_index,
+                          config_shuffle_random_list_in_job)
+    # Run lammps command
+    lmp_run(lmp_config_dir, lmp_data)
+    # choose bad configurations
+    lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
+
+
+def lmp_iter_dump_step(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index):
+    # choose bad configurations
+    lmp_parse_dump2poscar(lmp_config_number_in_job, lmp_config_dir, lmp_data, job_index)
 
 
 def lmp_get_bad_config_mask(model_devi_job_index: int,
@@ -344,6 +391,9 @@ def lmp_get_bad_config_mask(model_devi_job_index: int,
                 line_field: List = line.split()
                 if model_devi_f_trust_lo <= float(line_field[4]) <= model_devi_f_trust_hi:
                     # bad_configs_mask.append(True)
+                    # log
+                    print(line_field[4], file=sys.stdout)
+
                     bad_configs_devi_list.append(line_field[4])
                     bad_configs_index_list.append(line_number - 1)
                     bad_configs_numbers += 1
@@ -369,6 +419,9 @@ def lmp_get_bad_config_mask(model_devi_job_index: int,
 
         # The else is not so frequently
         # Not so frequently
+
+    # Check DONE
+    # return file is right
 
     return bad_configs_mask
 
@@ -412,6 +465,10 @@ def lmp_parse_dump2poscar(lmp_config_numbers: int,
             print("write file to :", os.path.abspath(poscar_path), file=sys.stderr)
             io.write(poscar_path, bad_config, format='vasp', direct=True)
 
+            # # Log
+            # print(bad_config.positions, file=sys.stdout)
+            # print("bad_config", file=sys.stdout)
+
 
 def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int, set_index: int,
                           config_shuffle_random_list_in_job: List):
@@ -424,8 +481,9 @@ def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int
     :returns:
 
     """
+    # Now update will preserve the previous steps information
     with open('generator_checkpoint.json', 'r') as generate_ckpt:
-        ckpt = load(generate_ckpt)
+        ckpt = json.load(generate_ckpt)
         ckpt['status'] = 'lammps'
         ckpt['config_index'] = lmp_config_index
         ckpt['job_index'] = job_index
@@ -435,4 +493,4 @@ def lmp_update_checkpoint(iter_index: int, lmp_config_index: int, job_index: int
 
     # Update the json
     with open('generator_checkpoint.json', 'w') as generate_ckpt:
-        dump(ckpt, generate_ckpt, indent=2)
+        json.dump(ckpt, generate_ckpt, indent=2)
